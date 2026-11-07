@@ -61,8 +61,12 @@ import java.util.Set;
  */
 public class MainActivity extends Activity {
 
-    // Dock, hidden apps, Live TV and grid width come from res/values/config.xml.
-    private String[] dockApps;
+    // Hidden apps, Live TV and grid width come from res/values/config.xml. The dock starts from
+    // config.xml too, then follows whatever is set on the TV (long-press OK on a tile), saved in prefs.
+    private final List<String> dockApps = new ArrayList<>();
+    static final int MAX_DOCK = 7;
+    static final String PREF_DOCK = "dock";
+    private String focusPkg; // tile to focus after the next rebuild (one just added or moved)
     private final Set<String> hidden = new HashSet<>();
     private String liveTvPkg, inputPickerPkg;
     private int cols;
@@ -99,7 +103,7 @@ public class MainActivity extends Activity {
     private int lastFocusedId = View.NO_ID;
     private boolean firstShow = true;
     private int packageSeq;
-    private PopupWindow inputsPopup;
+    private PopupWindow popup;
 
     private final BroadcastReceiver tick = new BroadcastReceiver() {
         @Override public void onReceive(Context c, Intent i) { updateClock(); updateWifi(); }
@@ -113,7 +117,12 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
-        dockApps = getResources().getStringArray(R.array.dock_apps);
+        String saved = getPreferences(MODE_PRIVATE).getString(PREF_DOCK, null);
+        if (saved != null) {
+            for (String p : saved.split(",")) if (!p.isEmpty()) dockApps.add(p);
+        } else {
+            dockApps.addAll(Arrays.asList(getResources().getStringArray(R.array.dock_apps)));
+        }
         hidden.addAll(Arrays.asList(getResources().getStringArray(R.array.hidden_apps)));
         hidden.add(getPackageName());
         liveTvPkg = getString(R.string.live_tv_package);
@@ -159,7 +168,7 @@ public class MainActivity extends Activity {
         super.onPause();
         handler.removeCallbacks(rotateWallpaper);
         unregisterReceiver(tick);
-        if (inputsPopup != null) inputsPopup.dismiss();
+        if (popup != null) popup.dismiss();
     }
 
     @Override
@@ -172,7 +181,7 @@ public class MainActivity extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         // Home pressed while already home: jump back to the first dock app.
-        if (inputsPopup != null) inputsPopup.dismiss();
+        if (popup != null) popup.dismiss();
         if (!dockCards.isEmpty()) dockCards.get(0).requestFocus();
         scroll.smoothScrollTo(0, 0);
     }
@@ -400,6 +409,11 @@ public class MainActivity extends Activity {
         wireFocus();
 
         if (!dock.isEmpty()) { title.setText(dock.get(0).label); setGlow(dock.get(0).color); }
+        if (focusPkg != null) {
+            for (View c : dockCards) if (((App) c.getTag()).pkg.equals(focusPkg)) lastFocusedId = c.getId();
+            for (View c : gridCards) if (((App) c.getTag()).pkg.equals(focusPkg)) lastFocusedId = c.getId();
+            focusPkg = null;
+        }
         View last = lastFocusedId == View.NO_ID ? null : findViewById(lastFocusedId);
         if (last != null) last.requestFocus();
         else if (!dockCards.isEmpty()) dockCards.get(0).requestFocus();
@@ -462,6 +476,8 @@ public class MainActivity extends Activity {
                 .addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
                 .setComponent(app.component)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)));
+        card.setLongClickable(true);
+        card.setOnLongClickListener(v -> { showTileMenu(v, app, inDock); return true; });
         card.setOnFocusChangeListener((v, has) -> {
             float s = has ? (inDock ? 1.12f : 1.1f) : 1f;
             v.animate().scaleX(s).scaleY(s).translationZ(has ? dp(14) : 0)
@@ -536,16 +552,6 @@ public class MainActivity extends Activity {
     // ---------------------------------------------------------------- inputs
 
     private void showInputs(View anchor) {
-        LinearLayout list = new LinearLayout(this);
-        list.setOrientation(LinearLayout.VERTICAL);
-        list.setPadding(dp(8), dp(8), dp(8), dp(8));
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(16));
-        bg.setColor(0xF02A2A2E);
-        bg.setStroke(dp(1), 0x26FFFFFF);
-        list.setBackground(bg);
-
-        PopupWindow pw = new PopupWindow(list, dp(200), -2, true);
         List<TextView> rows = new ArrayList<>();
 
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
@@ -565,6 +571,72 @@ public class MainActivity extends Activity {
         if (inputs.isEmpty() && isInstalled(inputPickerPkg)) rows.add(inputRow("All sources…", () -> openPackage(inputPickerPkg)));
 
         if (rows.isEmpty()) rows.add(inputRow("Settings", () -> launch(new Intent(Settings.ACTION_SETTINGS))));
+        showPopup(anchor, rows);
+    }
+
+    /** Long-press OK on a tile: add an app to the dock, or move / remove a dock app. */
+    private void showTileMenu(View card, App app, boolean inDock) {
+        List<TextView> rows = new ArrayList<>();
+        if (inDock) {
+            int i = dockApps.indexOf(app.pkg);
+            if (i > 0) rows.add(inputRow("Move left", () -> moveInDock(app.pkg, -1)));
+            if (i >= 0 && i < dockApps.size() - 1) rows.add(inputRow("Move right", () -> moveInDock(app.pkg, 1)));
+            rows.add(inputRow("Remove from dock", () -> {
+                dockApps.remove(app.pkg);
+                focusPkg = app.pkg; // it lands in the grid; keep focus on it
+                saveDock();
+            }));
+        } else if (dockCards.size() < MAX_DOCK) {
+            rows.add(inputRow("Add to dock", () -> {
+                dockApps.remove(app.pkg);
+                dockApps.add(app.pkg);
+                focusPkg = app.pkg;
+                saveDock();
+            }));
+        } else {
+            TextView full = inputRow("Dock is full (" + MAX_DOCK + ")", () -> { });
+            full.setAlpha(0.6f);
+            rows.add(full);
+        }
+        rows.add(inputRow("App info", () -> launch(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                android.net.Uri.fromParts("package", app.pkg, null)))));
+        showPopup(card, rows);
+    }
+
+    private void moveInDock(String pkg, int delta) {
+        // Move past apps in the saved list that aren't installed, so each press visibly moves the tile.
+        int i = dockApps.indexOf(pkg), j = i;
+        do { j += delta; } while (j >= 0 && j < dockApps.size() && !isShownInDock(dockApps.get(j)));
+        if (i < 0 || j < 0 || j >= dockApps.size()) return;
+        dockApps.remove(i);
+        dockApps.add(j, pkg);
+        focusPkg = pkg;
+        saveDock();
+    }
+
+    private boolean isShownInDock(String pkg) {
+        for (View c : dockCards) if (((App) c.getTag()).pkg.equals(pkg)) return true;
+        return false;
+    }
+
+    private void saveDock() {
+        getPreferences(MODE_PRIVATE).edit().putString(PREF_DOCK, String.join(",", dockApps)).apply();
+        buildApps();
+    }
+
+    /** A frosted dropdown of rows, each row's tag a Runnable run after the popup closes. */
+    private void showPopup(View anchor, List<TextView> rows) {
+        if (popup != null) popup.dismiss();
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setPadding(dp(8), dp(8), dp(8), dp(8));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(dp(16));
+        bg.setColor(0xF02A2A2E);
+        bg.setStroke(dp(1), 0x26FFFFFF);
+        list.setBackground(bg);
+
+        PopupWindow pw = new PopupWindow(list, dp(200), -2, true);
         for (TextView r : rows) {
             r.setOnClickListener(v -> { pw.dismiss(); ((Runnable) v.getTag()).run(); });
             list.addView(r, new LinearLayout.LayoutParams(-1, dp(36)));
@@ -578,9 +650,20 @@ public class MainActivity extends Activity {
         }
         pw.setOutsideTouchable(true);
         pw.setElevation(dp(16));
-        pw.setOnDismissListener(() -> { inputsPopup = null; anchor.requestFocus(); });
-        inputsPopup = pw;
-        pw.showAsDropDown(anchor, 0, dp(8), Gravity.START);
+        pw.setOnDismissListener(() -> { popup = null; anchor.requestFocus(); });
+        popup = pw;
+        // Below the anchor, or above it when there isn't room (the dock sits near the bottom edge).
+        // Placed by hand: on TV, showAsDropDown clips at the screen edge instead of flipping.
+        list.measure(View.MeasureSpec.makeMeasureSpec(dp(200), View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        int h = list.getMeasuredHeight();
+        int[] at = new int[2];
+        anchor.getLocationOnScreen(at); // includes the focus zoom
+        int anchorH = Math.round(anchor.getHeight() * anchor.getScaleY());
+        int screenH = getResources().getDisplayMetrics().heightPixels;
+        int y = at[1] + anchorH + dp(8);
+        if (y + h > screenH - dp(12)) y = Math.max(dp(12), at[1] - h - dp(8));
+        pw.showAtLocation(anchor, Gravity.TOP | Gravity.START, at[0], y);
         rows.get(0).requestFocus();
     }
 

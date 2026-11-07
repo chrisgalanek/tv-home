@@ -67,7 +67,11 @@ Undo everything with `tools/restore.sh <the same list>`.
   `launcher/assets/wallpapers/` (1920×1080 JPEGs, credits in `launcher/WALLPAPER-CREDITS.md`).
 - Deterministic D-pad focus, remembers the last tile, picks up newly installed apps on return.
 
-Change the dock: edit `config.xml`, then run `launcher/build-and-install.sh`.
+Change the dock on the TV: long-press OK on any app. In the grid you get **Add to dock** (up to 7
+apps); on a dock app, **Move left**, **Move right** and **Remove from dock**. Both menus also have
+**App info** (force stop, clear data, uninstall). Changes are saved on the TV and survive
+reinstalls. `config.xml` only sets the dock the launcher starts with; to go back to it, run
+`tools/batch.sh <<< 'pm clear com.mihir.tvhome'`.
 
 ## Gotchas we hit
 

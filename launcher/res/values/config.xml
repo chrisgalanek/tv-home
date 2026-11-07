@@ -5,7 +5,9 @@
   Set up for a Sony BRAVIA (Google TV). The TCL values it shipped with are in the comments.
 -->
 <resources>
-    <!-- Dock apps, left to right. Apps that aren't installed are skipped. -->
+    <!-- Starting dock apps, left to right. Apps that aren't installed are skipped. Once the dock is
+         changed on the TV (long-press OK on an app) that saved dock wins over this list; reset with
+         tools/batch.sh <<< 'pm clear com.mihir.tvhome'. -->
     <string-array name="dock_apps">
         <item>com.amazon.amazonvideo.livingroom</item>  <!-- Prime Video -->
         <item>com.cbs.ott</item>                        <!-- Paramount+ -->

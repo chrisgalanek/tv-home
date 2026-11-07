@@ -6,7 +6,6 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 LIST="${1:?usage: tools/restore.sh <debloat list>}"
-PY="${PY:-tools/venv/bin/python}"
 STOCK_LAUNCHER="${STOCK_LAUNCHER:-com.google.android.apps.tv.launcherx/.home.HomeActivity}"
 {
   grep -vE '^\s*(#|$)' "$LIST" | awk '{print "pm enable " $1}'
@@ -14,5 +13,5 @@ STOCK_LAUNCHER="${STOCK_LAUNCHER:-com.google.android.apps.tv.launcherx/.home.Hom
   echo "pm enable ${STOCK_LAUNCHER%%/*}"
   echo "cmd package set-home-activity --user 0 $STOCK_LAUNCHER"
   echo "input keyevent KEYCODE_HOME"
-} | "$PY" -I tools/tv.py --batch
+} | tools/batch.sh
 echo "Restored. Press Home on the remote."

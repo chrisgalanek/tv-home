@@ -1,33 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Launcher settings. Edit, then run launcher/build-and-install.sh.
-  Package names: tools/venv/bin/python -I tools/tv.py 'pm list packages'
+  Package names: tools/batch.sh <<< 'pm list packages'
+  Set up for a Sony BRAVIA (Google TV). The TCL values it shipped with are in the comments.
 -->
 <resources>
     <!-- Dock apps, left to right. Apps that aren't installed are skipped. -->
     <string-array name="dock_apps">
-        <item>com.apple.atve.androidtv.appletv</item>
-        <item>com.google.android.youtube.tv</item>
-        <item>in.startv.hotstar</item>
-        <item>com.netflix.ninja</item>
-        <item>com.amazon.amazonvideo.livingroom</item>
+        <item>com.amazon.amazonvideo.livingroom</item>  <!-- Prime Video -->
+        <item>com.cbs.ott</item>                        <!-- Paramount+ -->
+        <item>com.hulu.livingroomplus</item>            <!-- Hulu -->
+        <item>com.peacocktv.peacockandroid</item>       <!-- Peacock -->
+        <item>com.google.android.youtube.tv</item>      <!-- YouTube -->
     </string-array>
 
-    <!-- Never shown as tiles: system helpers, and the Live TV app (it's in the Inputs menu). -->
+    <!-- Never shown as tiles: system helpers, and the Live TV app (it's in the Inputs menu).
+         TCL: com.tcl.tv, com.tcl.suspension, com.tcl.t_solo, com.tcl.dashboard -->
     <string-array name="hidden_apps">
-        <item>com.tcl.tv</item>
-        <item>com.tcl.suspension</item>
-        <item>com.tcl.t_solo</item>
-        <item>com.tcl.dashboard</item>
+        <item>com.sony.dtv.tvlin</item>
+        <item>com.sony.dtv.notificationcenter</item>
+        <item>com.sony.dtv.seeds.iot</item>
+        <item>com.sony.dtv.timers</item>
+        <item>com.android.tv.settings</item>
     </string-array>
 
     <!-- The TV's Live TV / tuner app, listed last in the Inputs menu. Empty to leave it out.
          Common ones: com.tcl.tv (TCL), com.mediatek.wwtv.tvcenter (Xiaomi, many MediaTek sets),
-         com.google.android.tv (Google Live Channels), com.sony.dtv.tvx (Sony). -->
-    <string name="live_tv_package" translatable="false">com.tcl.tv</string>
+         com.google.android.tv (Google Live Channels), com.sony.dtv.tvlin (Sony Google TV). -->
+    <string name="live_tv_package" translatable="false">com.sony.dtv.tvlin</string>
 
-    <!-- The manufacturer's own source picker, used if switching to an input directly fails. -->
-    <string name="input_picker_package" translatable="false">com.tcl.suspension</string>
+    <!-- The manufacturer's own source picker, used if switching to an input directly fails.
+         TCL: com.tcl.suspension. On Sony the TV player opens the last input. -->
+    <string name="input_picker_package" translatable="false">com.sony.dtv.tvlin</string>
 
     <!-- Tiles per row in the grid. -->
     <integer name="columns">5</integer>

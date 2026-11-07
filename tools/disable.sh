@@ -5,6 +5,5 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 LIST="${1:?usage: tools/disable.sh <debloat list>}"
-PY="${PY:-tools/venv/bin/python}"
 grep -vE '^\s*(#|$)' "$LIST" | awk '{print "pm disable-user --user 0 " $1}' \
-  | "$PY" -I tools/tv.py --batch
+  | tools/batch.sh

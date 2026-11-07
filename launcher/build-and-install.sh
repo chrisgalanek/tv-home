@@ -29,8 +29,11 @@ cp "$B/base.apk" "$B/unsigned.apk"
 echo "built $B/tvhome.apk ($(wc -c < "$B/tvhome.apk") bytes)"
 [ "${1:-}" = "--build" ] && exit 0
 
-PY=../tools/venv/bin/python
-"$PY" -I ../tools/tv.py --push-b64 "$B/tvhome.apk" /data/local/tmp/tvhome.apk
+if command -v adb >/dev/null && [ "$(adb get-state 2>/dev/null)" = device ]; then
+  adb push "$B/tvhome.apk" /data/local/tmp/tvhome.apk   # Wireless debugging (Android 11+)
+else
+  ../tools/venv/bin/python -I ../tools/tv.py --push-b64 "$B/tvhome.apk" /data/local/tmp/tvhome.apk
+fi
 printf '%s\n' \
   "pm install -r /data/local/tmp/tvhome.apk" \
   "rm -f /data/local/tmp/tvhome.apk" \
@@ -41,5 +44,5 @@ printf '%s\n' \
   "cmd package set-home-activity --user 0 com.mihir.tvhome/.MainActivity" \
   "am force-stop com.android.tv.settings" \
   "input keyevent KEYCODE_HOME" \
-  | "$PY" -I ../tools/tv.py --batch
+  | ../tools/batch.sh
 echo "Installed. Press Home on the remote."

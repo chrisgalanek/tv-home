@@ -1,0 +1,26 @@
+# Sony BRAVIA (device BRAVIA_AE2), Google TV, Android 14
+# Apply: tools/disable.sh examples/sony-bravia-ae2/debloat.txt   Undo: tools/restore.sh <same file>
+# Everything is DISABLED for user 0, never uninstalled.
+# Kept on purpose (this household uses them): Chromecast, AirPlay, Google Assistant / Gemini voice,
+# DLNA home-network media, ambient screensaver, Google Feedback, every streaming app.
+# Already disabled before we started (left alone, restore won't touch them): Netflix, Sony tab,
+# Sony promos, Sony Pictures Core, YouTube Music, smart help, eco dashboard and a few more.
+
+# Viewing-habit tracking and telemetry
+tv.samba.ssm                       # Samba TV: identifies what's on screen (ACR) for ad targeting
+tv.samba.ssm.ui                    # Samba TV opt-in screens
+com.sonyericsson.idd.agent         # Sony usage-data agent
+com.sony.dtv.crashlogcollector     # uploads crash logs to Sony
+
+# Ads and promoted apps
+com.sony.dtv.sonyselect            # "Sony Select" app promos
+android.autoinstalls.config.sony.bravia   # silently installs promoted apps
+
+# Store demo mode
+com.sony.dtv.demosupport
+com.sony.dtv.demosystemsupport
+com.sony.dtv.multiscreendemo
+
+# Google extras this household doesn't use
+com.google.android.play.games
+com.google.android.videos          # Google TV / Play Movies (also feeds Freeplay channels)

@@ -622,13 +622,21 @@ public class MainActivity extends Activity {
     }
 
     private void updateWifi() {
-        String name = "Wi-Fi";
+        // Online/offline comes from ConnectivityManager. WifiManager only gives the network name (and a
+        // real network id) when Location is on, so a missing name must not be read as "Offline".
+        String name = "Offline";
         try {
-            WifiManager wm = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
-            if (wm != null && wm.getConnectionInfo() != null) {
-                String s = wm.getConnectionInfo().getSSID();
-                if (s != null && !s.contains("unknown ssid")) name = s.replace("\"", "");
-                if (wm.getConnectionInfo().getNetworkId() == -1) name = "Offline";
+            android.net.ConnectivityManager cm =
+                    (android.net.ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+            android.net.NetworkCapabilities nc = cm == null ? null : cm.getNetworkCapabilities(cm.getActiveNetwork());
+            if (nc != null && nc.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
+                boolean wifi = nc.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI);
+                name = wifi ? "Wi-Fi" : "Ethernet";
+                WifiManager wm = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
+                if (wifi && wm != null && wm.getConnectionInfo() != null) {
+                    String s = wm.getConnectionInfo().getSSID();
+                    if (s != null && !s.isEmpty() && !s.contains("unknown ssid")) name = s.replace("\"", "");
+                }
             }
         } catch (SecurityException ignored) { }
         wifiPill.setText("◉  " + name);

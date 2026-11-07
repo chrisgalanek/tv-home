@@ -20,6 +20,7 @@
         <package android:name="com.tcl.tv" />
         <package android:name="com.tcl.suspension" />
         <package android:name="com.sony.dtv.tvlin" />
+        <package android:name="com.android.vending" />
     </queries>
 
     <application

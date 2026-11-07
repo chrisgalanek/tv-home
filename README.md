@@ -60,7 +60,8 @@ Undo everything with `tools/restore.sh <the same list>`.
 ## The launcher
 
 - Clock, greeting and date top-left. Frosted pills top-right for **Inputs** (HDMI/AV/Live TV
-  dropdown; the remote's Menu key opens it too), **Wi-Fi** (shows the network name) and **Settings**.
+  dropdown; the remote's Menu key opens it too), **Get apps** (the Play Store; new installs appear in
+  the grid on their own), **Wi-Fi** (shows the network name when Location is on) and **Settings**.
 - A dock of your favourite apps. The focused app's name appears above it over a glow coloured from
   its banner. Press Down for every other app in a grid.
 - 12 nature photos crossfade every 10 minutes, with a scrim so text stays readable. Swap them in

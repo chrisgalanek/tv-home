@@ -66,6 +66,7 @@ public class MainActivity extends Activity {
     private final List<String> dockApps = new ArrayList<>();
     static final int MAX_DOCK = 7;
     static final String PREF_DOCK = "dock";
+    static final String PLAY_STORE = "com.android.vending";
     private String focusPkg; // tile to focus after the next rebuild (one just added or moved)
     private final Set<String> hidden = new HashSet<>();
     private String liveTvPkg, inputPickerPkg;
@@ -312,11 +313,20 @@ public class MainActivity extends Activity {
         right.setClipChildren(false);
         TextView inputs = pill("Inputs", "⇥");
         inputs.setOnClickListener(v -> showInputs(v));
+        // Get apps: the Play Store's TV storefront. New installs show up in the grid on their own.
+        List<TextView> top = new ArrayList<>(Arrays.asList(inputs));
+        if (isInstalled(PLAY_STORE)) {
+            TextView store = pill("Get apps", "+");
+            store.setOnClickListener(v -> openPackage(PLAY_STORE));
+            top.add(store);
+        }
         wifiPill = pill("Wi-Fi", "◉");
         wifiPill.setOnClickListener(v -> launch(new Intent(Settings.ACTION_WIFI_SETTINGS)));
         TextView settings = pill("Settings", "⚙");
         settings.setOnClickListener(v -> launch(new Intent(Settings.ACTION_SETTINGS)));
-        for (TextView p : new TextView[]{inputs, wifiPill, settings}) {
+        top.add(wifiPill);
+        top.add(settings);
+        for (TextView p : top) {
             right.addView(p, llp(-2, dp(30), dp(10), 0, 0, 0));
             pills.add(p);
         }

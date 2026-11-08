@@ -35,6 +35,11 @@
          TCL: com.tcl.suspension. On Sony the TV player opens the last input. -->
     <string name="input_picker_package" translatable="false">com.sony.dtv.tvlin</string>
 
+    <!-- Home screen pictures: "art" (historic Christian paintings, sculpture, stained glass and
+         mosaics, with a caption), "nature" (landscape photos) or "both" (taking turns).
+         Credits for both sets: launcher/WALLPAPER-CREDITS.md -->
+    <string name="wallpaper_set" translatable="false">art</string>
+
     <!-- Tiles per row in the grid. -->
     <integer name="columns">6</integer>
 </resources>

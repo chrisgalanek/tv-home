@@ -60,11 +60,11 @@ Undo everything with `tools/restore.sh <the same list>`.
 ## The launcher
 
 - Clock, greeting and date top-left. Top-right, a **Search** pill (see below) and round icon
-  buttons whose label slides out on focus: **Inputs** (HDMI/AV/Live TV dropdown; the remote's Menu
-  key opens it too), **Get apps** (the Play Store; new installs appear in the grid on their own),
+  buttons whose label slides out on focus: **Get apps** (the Play Store; new installs appear in the grid on their own),
+  **Screensaver** (the art slideshow now, starting on the current picture; any button returns),
   **Sleep** (the TV's own sleep timer, 15 to 120 minutes; shown on Sony sets, since only the
-  manufacturer's app may turn the TV off), **Wi-Fi** (shows the network name when Location is on)
-  and **Settings**.
+  manufacturer's app may turn the TV off), **Wi-Fi** (shows the network name when Location is on),
+  **Inputs** (HDMI/AV/Live TV dropdown; the remote's Menu key opens it too) and **Settings**.
 - A dock of your favourite apps over a glow coloured from the focused app's banner. If you've
   watched something in that app, its artwork fades in behind the dock with **Continue · App**, the
   episode and the show; otherwise just the app's name shows. The top of the next row peeks in at
@@ -77,9 +77,31 @@ Undo everything with `tools/restore.sh <the same list>`.
   notification listener records it, and the install script grants that access over ADB. It only
   covers apps that publish those details, and history starts when the launcher is installed. OK
   goes back into the show while its app is still running, otherwise opens the app; long-press for
-  Search in the app, Search all apps, or Remove from list. Stored on the TV only.
-- 12 nature photos crossfade every 10 minutes, with a scrim so text stays readable. Swap them in
-  `launcher/assets/wallpapers/` (1920×1080 JPEGs, credits in `launcher/WALLPAPER-CREDITS.md`).
+  Search in the app, Search all apps, or Remove from list. Some apps (Peacock) report only the
+  episode title, not the show: long-press **Choose the show**, search for it and pick it, and the
+  tile gets the show name and the episode's picture. Later episodes from that app are matched to
+  shows you've picked on their own. Stored on the TV only.
+- The background crossfades to a new picture after a random 2 to 10 minutes, in shuffled order
+  (every picture once before any repeats, shared with the screensaver). Move up to the top bar and
+  **‹ Previous picture** and **Next picture ›** fade in at its left end (Left from Search); they fade
+  out again when you move down. By default it's 90 pictures of
+  historic Christian art: paintings (Fra Angelico, Leonardo, Michelangelo, Caravaggio, Rembrandt),
+  sculpture (Michelangelo's Pietà, David and Moses, Bernini, the Veit Stoss altarpiece), stained
+  glass, mosaics and icons, and churches inside and out, from St Mary's Basilica in Kraków to St
+  Peter's. Each has a small caption above the dock (title, artist and date, where it is), and bright
+  pictures are dimmed so the clock and dock stay readable. Set `wallpaper_set` in `config.xml` to
+  `nature` for the 12 landscape photos, or `both`. Pictures are 1920×1080 JPEGs in
+  `launcher/assets/wallpapers/`; credits in `launcher/WALLPAPER-CREDITS.md`.
+- New pictures arrive on their own: once a day the launcher adds up to 6 freely licensed pictures
+  of Christian paintings, sculpture, stained glass, mosaics and churches inside and out from
+  Wikimedia Commons (photos from its "Quality images"), framed like the built-in set and captioned
+  with title, photographer or artist, and licence. It keeps the newest 150 (on the TV in the app's
+  files, with credits.tsv listing each source).
+- The screensaver shows the same pictures full screen and at full brightness: it starts on the one
+  the home screen is showing, then crossfades to another every 40 seconds, each shown whole, with
+  its caption and the time in the bottom corners. The install script sets it as the TV's screensaver ("Christian art");
+  to go back to Google's Ambient mode, run
+  `tools/batch.sh <<< 'settings put secure screensaver_components com.google.android.apps.tv.dreamx/.service.Backdrop'`.
 - Deterministic D-pad focus, remembers the last tile, picks up newly installed apps on return.
 
 ### Search

@@ -126,6 +126,31 @@ final class Tmdb {
         return out;
     }
 
+    /**
+     * The still (a frame from the episode) for a show's episode, found by the episode's name,
+     * newest season first. Null if no episode has that name or it has no still.
+     */
+    String episodeStill(int tvId, String episodeName) throws Exception {
+        String want = SearchActivity.squash(episodeName);
+        if (want.isEmpty()) return null;
+        int seasons = get("/tv/" + tvId).optInt("number_of_seasons");
+        for (int s = Math.min(seasons, 60); s >= 0; s--) {
+            JSONArray eps;
+            try {
+                eps = get("/tv/" + tvId + "/season/" + s).optJSONArray("episodes");
+            } catch (Exception e) {
+                continue; // no such season (specials are often missing)
+            }
+            for (int i = 0; eps != null && i < eps.length(); i++) {
+                JSONObject e = eps.getJSONObject(i);
+                if (!SearchActivity.squash(e.optString("name")).equals(want)) continue;
+                String still = e.optString("still_path", "");
+                return still.isEmpty() || "null".equals(still) ? null : still;
+            }
+        }
+        return null;
+    }
+
     /** Poster/profile/logo image, cached in memory and on disk. size: e.g. "w342", "w780". */
     Bitmap image(String path, String size) {
         if (path == null || path.isEmpty()) return null;

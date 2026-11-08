@@ -27,6 +27,16 @@ final class WatchHistory {
         String pkg, title, subtitle;
         long time;
         long position, duration; // ms; 0 when the app doesn't say (progress bar on the tile)
+        boolean artChecked;      // TMDB has been asked for this episode's or movie's own picture
+        boolean showChosen;      // the show (subtitle) was picked on the TV, not reported by the app
+
+        static final long MOVIE_MS = 70 * 60 * 1000L;
+
+        /** An episode whose app doesn't say which show (Peacock): no subtitle, and shorter than a movie. */
+        boolean unknownShow() { return subtitle.isEmpty() && duration > 0 && duration < MOVIE_MS; }
+
+        /** Probably a movie: no show name, and either feature length or of unknown length. */
+        boolean movie() { return subtitle.isEmpty() && !unknownShow(); }
 
         String key() { return pkg + "|" + title.toLowerCase(java.util.Locale.ROOT); }
     }
@@ -46,6 +56,8 @@ final class WatchHistory {
                 it.time = o.optLong("time");
                 it.position = o.optLong("pos");
                 it.duration = o.optLong("dur");
+                it.artChecked = o.optBoolean("ac2");
+                it.showChosen = o.optBoolean("cs"); // "ac2": everything is re-checked once under the 70-minute rule
                 out.add(it);
             }
         } catch (JSONException ignored) { }
@@ -61,6 +73,8 @@ final class WatchHistory {
                 Item old = items.remove(i);
                 if (item.subtitle.isEmpty()) item.subtitle = old.subtitle;
                 if (item.duration == 0) { item.position = old.position; item.duration = old.duration; }
+                item.artChecked = old.artChecked;
+                item.showChosen = old.showChosen;
                 isNew = false;
                 break;
             }
@@ -83,6 +97,63 @@ final class WatchHistory {
             save(c, items);
             return;
         }
+    }
+
+    /** Remembers that TMDB was asked for this item's picture, so it isn't asked again. */
+    static synchronized void markArtChecked(Context c, String key) {
+        List<Item> items = load(c);
+        for (Item it : items) {
+            if (!it.key().equals(key)) continue;
+            if (it.artChecked) return;
+            it.artChecked = true;
+            save(c, items);
+            return;
+        }
+    }
+
+    /**
+     * Sets the show for an episode whose app didn't say ("Choose the show"), so its tile and the
+     * episode still can be looked up. Clears the old picture and asks TMDB again.
+     */
+    static synchronized void setShow(Context c, String key, String show, boolean chosen) {
+        List<Item> items = load(c);
+        for (Item it : items) {
+            if (!it.key().equals(key)) continue;
+            it.subtitle = show;
+            it.showChosen = chosen;
+            it.artChecked = false;
+            deleteArt(c, it);
+            save(c, items);
+            return;
+        }
+    }
+
+    /** Shows picked on the TV, per app, so that app's later episodes can be matched on their own. */
+    static synchronized void addChosenShow(Context c, String pkg, int tmdbId, String name) {
+        List<String[]> shows = chosenShows(c);
+        JSONArray a = new JSONArray();
+        try {
+            a.put(new JSONObject().put("pkg", pkg).put("id", tmdbId).put("name", name));
+            for (String[] s : shows) {
+                if (s[0].equals(pkg) && s[1].equals(String.valueOf(tmdbId))) continue;
+                if (a.length() >= 20) break;
+                a.put(new JSONObject().put("pkg", s[0]).put("id", Integer.parseInt(s[1])).put("name", s[2]));
+            }
+        } catch (JSONException ignored) { }
+        prefs(c).edit().putString("chosen_shows", a.toString()).apply();
+    }
+
+    /** {pkg, TMDB id, name}, most recently picked first. */
+    static synchronized List<String[]> chosenShows(Context c) {
+        List<String[]> out = new ArrayList<>();
+        try {
+            JSONArray a = new JSONArray(prefs(c).getString("chosen_shows", "[]"));
+            for (int i = 0; i < a.length(); i++) {
+                JSONObject o = a.getJSONObject(i);
+                out.add(new String[]{o.getString("pkg"), String.valueOf(o.getInt("id")), o.getString("name")});
+            }
+        } catch (JSONException ignored) { }
+        return out;
     }
 
     static synchronized void remove(Context c, Item item) {
@@ -126,7 +197,7 @@ final class WatchHistory {
         return BitmapFactory.decodeFile(f.getPath(), o);
     }
 
-    private static void deleteArt(Context c, Item item) {
+    static void deleteArt(Context c, Item item) {
         //noinspection ResultOfMethodCallIgnored
         artFile(c, item).delete();
     }
@@ -144,7 +215,7 @@ final class WatchHistory {
             for (Item it : items) {
                 a.put(new JSONObject().put("pkg", it.pkg).put("title", it.title)
                         .put("subtitle", it.subtitle).put("time", it.time)
-                        .put("pos", it.position).put("dur", it.duration));
+                        .put("pos", it.position).put("dur", it.duration).put("ac2", it.artChecked).put("cs", it.showChosen));
             }
         } catch (JSONException ignored) { }
         prefs(c).edit().putString(KEY, a.toString()).apply();

@@ -46,6 +46,11 @@ import java.util.concurrent.Executors;
  */
 public class SearchActivity extends Activity {
     static final String EXTRA_QUERY = "query";
+    // Pick mode ("Choose the show" on a Recently watched tile): picking a TV show returns it to the
+    // home screen instead of opening where to watch. The extra is the episode title, for the prompt.
+    static final String EXTRA_PICK_SHOW_FOR = "pick_show_for";
+    static final String RESULT_SHOW_ID = "show_id", RESULT_SHOW_NAME = "show_name";
+    private String pickFor;
     static final int COLS = 6;           // poster size in the result rows: 6 across the screen
 
     /** TMDB/JustWatch provider names (squashed) → Android TV package. */
@@ -115,6 +120,8 @@ public class SearchActivity extends Activity {
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN
                 | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
         setContentView(buildUi());
+        pickFor = getIntent().getStringExtra(EXTRA_PICK_SHOW_FOR);
+        if (pickFor != null) field.setHint("Type the show's name");
         String q = getIntent().getStringExtra(EXTRA_QUERY);
         if (!tmdb.hasKey()) {
             status.setText("Search needs a free TMDB API key. Put it in launcher/tmdb-api-key.txt on your "
@@ -124,10 +131,27 @@ public class SearchActivity extends Activity {
             field.setSelection(q.length());
             search();
         } else {
+            if (pickFor != null) status.setText(pickPrompt());
             field.requestFocus();
             ui.postDelayed(() -> ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE))
                     .showSoftInput(field, InputMethodManager.SHOW_IMPLICIT), 300);
         }
+    }
+
+    private String pickPrompt() {
+        return "Which show is “" + pickFor + "” from? Search for it, then pick it.";
+    }
+
+    /** Pick mode: OK on a show sends it back to the home screen. Movies and people don't count. */
+    private boolean pick(Tmdb.Result r) {
+        if (pickFor == null) return false;
+        if ("tv".equals(r.type)) {
+            setResult(RESULT_OK, new Intent().putExtra(RESULT_SHOW_ID, r.id).putExtra(RESULT_SHOW_NAME, r.title));
+            finish();
+        } else if (!"person".equals(r.type)) {
+            status.setText("That's a movie. " + pickPrompt());
+        }
+        return !"person".equals(r.type);
     }
 
     @Override
@@ -291,6 +315,7 @@ public class SearchActivity extends Activity {
     private void show(List<Tmdb.Result> r, String head, String msg) {
         results = r;
         this.head = head;
+        if (pickFor != null && msg.isEmpty()) msg = pickPrompt();
         credits = false;
         status.setText(msg);
         render();
@@ -415,7 +440,8 @@ public class SearchActivity extends Activity {
         ov.setLineSpacing(0, 1.2f);
         info.addView(ov, llp(-1, -2, 0, dp(12), 0, 0));
         TextView hint = text(14, "sans-serif-medium", 0x99FFFFFF);
-        hint.setText(compact ? "Press Search or ↓ for all results" : "OK  ·  Where to watch");
+        hint.setText(compact ? "Press Search or ↓ for all results"
+                : pickFor != null ? "OK  ·  Choose this show" : "OK  ·  Where to watch");
         info.addView(hint, llp(-2, -2, 0, dp(14), 0, 0));
         int infoW = screenW - 2 * dp(56) - cardW - dp(32);
         box.addView(info, llp(infoW, -2, dp(32), 0, 0, 0));
@@ -425,7 +451,7 @@ public class SearchActivity extends Activity {
             hint.setTextColor(has ? Color.WHITE : 0x99FFFFFF);
             if (has) { lastCard = v; scrollTo(box); }
         });
-        frame.setOnClickListener(v -> openDetail(r));
+        frame.setOnClickListener(v -> { if (!pick(r)) openDetail(r); });
         cards.add(frame);
         row.items.addView(box);
     }
@@ -505,7 +531,7 @@ public class SearchActivity extends Activity {
             Focus.animate(v, has, ring);
             if (has) { lastCard = v; scrollTo(box); }
         });
-        frame.setOnClickListener(v -> { if (person) showCredits(r); else openDetail(r); });
+        frame.setOnClickListener(v -> { if (pick(r)) return; if (person) showCredits(r); else openDetail(r); });
         cards.add(frame);
         return box;
     }

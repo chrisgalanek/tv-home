@@ -50,6 +50,8 @@ printf '%s\n' \
   "rm -f /data/local/tmp/tvhome.apk" \
   "pm grant com.mihir.tvhome android.permission.ACCESS_FINE_LOCATION" \
   "cmd notification allow_listener com.mihir.tvhome/com.mihir.tvhome.WatchListener" \
+  "settings put secure screensaver_components com.mihir.tvhome/.ArtDream" \
+  "settings put secure screensaver_enabled 1" \
   "cmd package set-home-activity --user 0 com.mihir.tvhome/.MainActivity" \
   "pm disable-user --user 0 $STOCK_LAUNCHER" \
   "pm disable-user --user 0 com.google.android.tungsten.setupwraith" \

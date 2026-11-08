@@ -115,12 +115,22 @@ public class MainActivity extends Activity {
     private View glow;
     private ImageView wallBack, wallFront;
     private View gridShade;
-    private String[] wallpapers = new String[0];
+    private String[] wallpapers = new String[0]; // asset paths, e.g. "wallpapers/art/07.jpg"
+    private final Map<String, String[]> captions = new HashMap<>(); // path → {title, artist and date, place}
+    private View wallDim;
+    private LinearLayout caption;
+    private TextView captionTitle, captionSub;
     private int wallIndex = -1;
     private long wallChangedAt;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable rotateWallpaper = this::nextWallpaper;
-    static final long WALLPAPER_INTERVAL_MS = 10 * 60 * 1000;
+    // A new picture after a random 2 to 10 minutes, so the changes don't feel mechanical.
+    static final long WALLPAPER_MIN_MS = 2 * 60 * 1000, WALLPAPER_MAX_MS = 10 * 60 * 1000;
+    private long wallDelay = WALLPAPER_MIN_MS;
+    // Pictures shown before (for Previous) and after, when you've stepped back (for Next).
+    private final java.util.ArrayDeque<Integer> wallHistory = new java.util.ArrayDeque<>();
+    private final java.util.ArrayDeque<Integer> wallForward = new java.util.ArrayDeque<>();
+    private TextView searchPill, picPrev, picNext;
     private TextView greeting, clock, ampm, date, title, wifiPill, appsLabel;
     private int glowColor = 0xFF3A3A3A;
     private ValueAnimator glowAnim;
@@ -153,11 +163,15 @@ public class MainActivity extends Activity {
         inputPickerPkg = getString(R.string.input_picker_package);
         cols = getResources().getInteger(R.integer.columns);
         tmdb = new Tmdb(this);
+        ArtDownloader.schedule(this); // a few new art pictures each day
         getWindow().getDecorView().setSystemUiVisibility(
                 View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                         | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
         setContentView(buildUi());
         buildApps();
+        // The picture buttons show only while focus is in the top bar.
+        getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener(
+                (oldFocus, newFocus) -> showPictureButtons(newFocus != null && pills.contains(newFocus)));
 
         IntentFilter pf = new IntentFilter();
         pf.addAction(Intent.ACTION_PACKAGE_ADDED);
@@ -186,8 +200,8 @@ public class MainActivity extends Activity {
         if (getPackageManager().getChangedPackages(packageSeq) != null) buildApps();
         if (firstShow) { firstShow = false; playEntrance(); }
         // New photo on return if the current one has been up for the full interval.
-        if (wallIndex < 0 || SystemClock.elapsedRealtime() - wallChangedAt >= WALLPAPER_INTERVAL_MS) nextWallpaper();
-        else scheduleWallpaper(WALLPAPER_INTERVAL_MS - (SystemClock.elapsedRealtime() - wallChangedAt));
+        if (wallIndex < 0 || SystemClock.elapsedRealtime() - wallChangedAt >= wallDelay) nextWallpaper();
+        else scheduleWallpaper(wallDelay - (SystemClock.elapsedRealtime() - wallChangedAt));
     }
 
     @Override
@@ -231,8 +245,13 @@ public class MainActivity extends Activity {
         wallFront = wallpaperLayer();
         root.addView(wallBack, new FrameLayout.LayoutParams(-1, -1));
         root.addView(wallFront, new FrameLayout.LayoutParams(-1, -1));
-        // Show artwork for the focused dock app, crossfaded over the wallpaper (index 2: showWallpaper
-        // keeps the two photo layers at 0 and 1).
+        // Extra darkening for bright pictures, set per picture from its brightness (see showWallpaper).
+        wallDim = new View(this);
+        wallDim.setBackgroundColor(Color.BLACK);
+        wallDim.setAlpha(0f);
+        root.addView(wallDim, new FrameLayout.LayoutParams(-1, -1));
+        // Show artwork for the focused dock app, crossfaded over the wallpaper (showWallpaper keeps the
+        // two picture layers at 0 and 1, under the dimmer and this).
         heroArt = wallpaperLayer();
         heroArt.setAlpha(0f);
         root.addView(heroArt, new FrameLayout.LayoutParams(-1, -1));
@@ -245,9 +264,7 @@ public class MainActivity extends Activity {
         gridShade.setBackgroundColor(0xB3000000);
         gridShade.setAlpha(0f);
         root.addView(gridShade, new FrameLayout.LayoutParams(-1, -1));
-        try {
-            wallpapers = getAssets().list("wallpapers");
-        } catch (java.io.IOException ignored) { }
+        loadWallpapers();
 
         glow = new View(this);
         root.addView(glow, new FrameLayout.LayoutParams(-1, -1));
@@ -295,7 +312,26 @@ public class MainActivity extends Activity {
         heroSub.setEllipsize(android.text.TextUtils.TruncateAt.END);
         heroText.addView(heroSub, llp(-2, -2, 0, dp(2), 0, 0));
         for (TextView t : new TextView[]{kicker, title, heroSub}) t.setShadowLayer(dp(14), 0, 0, 0x99000000);
-        bottom.addView(heroText, llp(dp(900), -2, dp(8), 0, 0, dp(14)));
+        // Above the dock: the hero text on the left, the wallpaper's caption (artworks) on the right.
+        LinearLayout aboveDock = new LinearLayout(this);
+        aboveDock.setGravity(Gravity.BOTTOM);
+        aboveDock.addView(heroText, new LinearLayout.LayoutParams(0, -2, 1f));
+        caption = new LinearLayout(this);
+        caption.setOrientation(LinearLayout.VERTICAL);
+        caption.setGravity(Gravity.END);
+        captionTitle = text(14, "sans-serif-medium", 0xE6FFFFFF);
+        captionSub = text(12, "sans-serif", 0xB3FFFFFF);
+        for (TextView t : new TextView[]{captionTitle, captionSub}) {
+            t.setSingleLine(true);
+            t.setEllipsize(android.text.TextUtils.TruncateAt.END); // long captions end in "…", never cut at the start
+            t.setMaxWidth(dp(760));
+            t.setGravity(Gravity.END);
+            t.setShadowLayer(dp(10), 0, 0, 0xCC000000);
+            caption.addView(t);
+        }
+        caption.setAlpha(0f);
+        aboveDock.addView(caption, llp(-2, -2, dp(24), 0, dp(8), 0));
+        bottom.addView(aboveDock, llp(-1, -2, dp(8), 0, 0, dp(14)));
 
         dockRow = new LinearLayout(this);
         dockRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -383,16 +419,31 @@ public class MainActivity extends Activity {
         TextView search = pill("Search", R.drawable.ic_search, true);
         // Search: movies, shows and people across the TV's apps (SearchActivity, TMDB data).
         search.setOnClickListener(v -> launch(new Intent(this, SearchActivity.class)));
-        List<TextView> top = new ArrayList<>(Arrays.asList(search));
+        searchPill = search;
+        // Previous / next picture: fade in at the start of the bar while focus is up here.
+        picPrev = pill("Previous picture", R.drawable.ic_prev, false);
+        picPrev.setOnClickListener(v -> prevWallpaper());
+        picNext = pill("Next picture", R.drawable.ic_next, false);
+        picNext.setOnClickListener(v -> nextWallpaper());
+        for (TextView t : new TextView[]{picPrev, picNext}) t.setAlpha(0f);
+        List<TextView> top = new ArrayList<>(Arrays.asList(picPrev, picNext, search));
         inputsPill = pill("Inputs", R.drawable.ic_input, false);
         inputsPill.setOnClickListener(v -> showInputs(v));
-        top.add(inputsPill);
         // Get apps: the Play Store's TV storefront. New installs show up in the grid on their own.
         if (isInstalled(PLAY_STORE)) {
             TextView store = pill("Get apps", R.drawable.ic_add, false);
             store.setOnClickListener(v -> openPackage(PLAY_STORE));
             top.add(store);
         }
+        // Screensaver: the art slideshow now (the same one the TV's screensaver shows).
+        TextView saver = pill("Screensaver", R.drawable.ic_screensaver, false);
+        saver.setOnClickListener(v -> {
+            try {
+                startActivity(new Intent(this, SlideshowActivity.class));
+                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+            } catch (RuntimeException ignored) { }
+        });
+        top.add(saver);
         // Sleep: the TV's own sleep timer screen. Turning the TV off needs a system permission a
         // launcher can't have, so the manufacturer's timer does the work. Hidden if there isn't one.
         Intent sleep = new Intent(SONY_SLEEP_TIMER).setPackage(SONY_TIMERS);
@@ -406,6 +457,7 @@ public class MainActivity extends Activity {
         TextView settings = pill("Settings", R.drawable.ic_settings, false);
         settings.setOnClickListener(v -> launch(new Intent(Settings.ACTION_SETTINGS)));
         top.add(wifiPill);
+        top.add(inputsPill); // next to Settings
         top.add(settings);
         for (TextView p : top) {
             right.addView(p, llp(-2, dp(34), dp(12), 0, 0, 0));
@@ -609,27 +661,34 @@ public class MainActivity extends Activity {
         for (WatchHistory.Item it : WatchHistory.load(this)) {
             if (hidden.contains(it.pkg) || !isInstalled(it.pkg)) continue;
             items.add(it);
-            sig.append(it.key()).append(WatchHistory.hasArt(this, it) ? "+" : "-").append('\n');
+            sig.append(it.key()).append(WatchHistory.hasArt(this, it) ? "+" : "-")
+                    .append(it.artChecked ? "t" : "").append('\n');
         }
         history = items;
         fetchMissingArt(items);
         if (sig.toString().equals(recentsSig)) return;
         recentsSig = sig.toString();
 
-        boolean hadFocus = false;
-        for (View c : recentCards) if (c.getId() == lastFocusedId) hadFocus = true;
+        int focusAt = -1; // the tile that had focus, so it keeps it after the rebuild
+        for (int i = 0; i < recentCards.size(); i++) if (recentCards.get(i).getId() == lastFocusedId) focusAt = i;
+        boolean focused = focusAt >= 0 && recentCards.get(focusAt).hasFocus();
         recentsRow.removeAllViews();
         recentCards.clear();
         int screenW = getResources().getDisplayMetrics().widthPixels;
-        int tileW = (screenW - 2 * dp(68) - (cols - 1) * dp(20)) / cols; // same width as grid tiles
+        // 4 across: big enough for the picture and the show's title over it.
+        int tileW = (screenW - 2 * dp(68) - 3 * dp(20)) / 4;
         for (int i = 0; i < items.size(); i++) {
             LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(tileW, -2);
             p.setMargins(i == 0 ? 0 : dp(10), 0, i == items.size() - 1 ? 0 : dp(10), 0);
             recentsRow.addView(recentTile(items.get(i)), p);
         }
         recentsSection.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
-        if (hadFocus) lastFocusedId = recentCards.isEmpty() ? View.NO_ID : recentCards.get(0).getId();
-        recentsScroll.scrollTo(0, 0);
+        if (focusAt >= 0) {
+            View keep = recentCards.isEmpty() ? null : recentCards.get(Math.min(focusAt, recentCards.size() - 1));
+            lastFocusedId = keep == null ? View.NO_ID : keep.getId();
+            if (focused && keep != null) keep.requestFocus();
+        }
+        if (!focused) recentsScroll.scrollTo(0, 0);
         wireFocus();
     }
 
@@ -656,7 +715,13 @@ public class MainActivity extends Activity {
         img.setScaleType(ImageView.ScaleType.CENTER_CROP);
         Bitmap art = WatchHistory.loadArt(this, it, 640);
         if (art != null) img.setImageBitmap(art);
-        else img.setImageDrawable(appBanner(it.pkg));
+        else {
+            // No picture (the app sent none and TMDB couldn't tell which show): the app's banner,
+            // smaller and raised, leaving room for the episode title below it.
+            img.setImageDrawable(appBanner(it.pkg));
+            img.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            img.setPadding(dp(40), dp(14), dp(40), dp(62));
+        }
         card.addView(img, new FrameLayout.LayoutParams(-1, -1));
 
         if (art != null) {
@@ -673,21 +738,33 @@ public class MainActivity extends Activity {
             badge.setElevation(dp(2));
             card.addView(badge, lp(dp(26), dp(26), Gravity.TOP | Gravity.START, dp(8), dp(8), 0, 0));
         }
+        // Over the bottom of the picture, on a dark fade: the episode's title in white (a movie has
+        // none, so its picture stays clear). Unknown show (the app gave only the episode): the same.
+        boolean episode = !it.movie();
+        if (episode) {
+        View fade = new View(this);
+        fade.setBackground(new GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP,
+                new int[]{0xE6000000, 0x73000000, 0x00000000}));
+        card.addView(fade, lp(-1, -1, Gravity.BOTTOM, 0, 0, 0, 0));
+        TextView ep = text(14, "sans-serif-medium", Color.WHITE);
+        ep.setText(it.title);
+        ep.setMaxLines(2);
+        ep.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        ep.setShadowLayer(dp(6), 0, 0, 0xCC000000);
+        card.addView(ep, lp(-1, -2, Gravity.BOTTOM, dp(12), 0, dp(12), dp(12)));
+        }
+
         if (it.duration > 0) {
             float f = Math.max(0f, Math.min(1f, it.position / (float) it.duration));
             if (f > 0.02f && f < 0.97f) {
-                // How far in: a thin white bar along the bottom of the artwork.
+                // How far in: a thin white bar along the bottom edge of the picture.
                 LinearLayout bar = new LinearLayout(this);
-                GradientDrawable track = new GradientDrawable();
-                track.setCornerRadius(dp(2));
-                track.setColor(0x59FFFFFF);
-                bar.setBackground(track);
-                bar.setClipToOutline(true);
+                bar.setBackgroundColor(0x59FFFFFF);
                 View fill = new View(this);
                 fill.setBackgroundColor(Color.WHITE);
                 bar.addView(fill, new LinearLayout.LayoutParams(0, -1, f));
                 bar.addView(new View(this), new LinearLayout.LayoutParams(0, -1, 1f - f));
-                card.addView(bar, lp(-1, dp(4), Gravity.BOTTOM, dp(10), 0, dp(10), dp(8)));
+                card.addView(bar, lp(-1, dp(4), Gravity.BOTTOM, 0, 0, 0, 0));
             }
         }
 
@@ -695,16 +772,21 @@ public class MainActivity extends Activity {
         card.addView(shine, new FrameLayout.LayoutParams(-1, -1));
         box.addView(card, new LinearLayout.LayoutParams(-1, -2));
 
-        TextView name = text(14, "sans-serif-medium", Color.WHITE);
-        name.setText(it.title);
-        name.setSingleLine(true);
-        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        box.addView(name, llp(-1, -2, dp(2), dp(10), dp(2), 0));
-        TextView sub = text(13, "sans-serif", 0xB3FFFFFF);
-        sub.setText(it.subtitle.isEmpty() ? appLabel(it.pkg) : it.subtitle);
-        sub.setSingleLine(true);
-        sub.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        box.addView(sub, llp(-1, -2, dp(2), dp(2), dp(2), 0));
+        // Under the picture: the show's title (a movie: its title), then the app (the "channel").
+        // Unknown show: just the app, rather than guess a show name.
+        if (!it.unknownShow()) {
+            TextView name = text(16, "sans-serif-medium", Color.WHITE);
+            name.setText(episode ? it.subtitle : it.title);
+            name.setSingleLine(true);
+            name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            box.addView(name, llp(-1, -2, dp(2), dp(10), dp(2), 0));
+        }
+        TextView channel = text(it.unknownShow() ? 16 : 13, it.unknownShow() ? "sans-serif-medium" : "sans-serif",
+                it.unknownShow() ? Color.WHITE : 0xB3FFFFFF);
+        channel.setText(appLabel(it.pkg));
+        channel.setSingleLine(true);
+        channel.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        box.addView(channel, llp(-1, -2, dp(2), it.unknownShow() ? dp(10) : dp(2), dp(2), 0));
 
         card.setOnClickListener(v -> openRecent(it));
         card.setOnLongClickListener(v -> { showRecentMenu(v, it); return true; });
@@ -750,6 +832,16 @@ public class MainActivity extends Activity {
         if (!getPackageManager().queryIntentActivities(inApp, 0).isEmpty()) {
             rows.add(inputRow("Search in " + app, () -> launch(inApp)));
         }
+        if (it.unknownShow() || it.showChosen) {
+            // The app didn't say which show this is (Peacock): pick it in Search, once.
+            rows.add(inputRow(it.showChosen ? "Change the show" : "Choose the show", () -> {
+                pickingFor = it.key();
+                try {
+                    startActivityForResult(new Intent(this, SearchActivity.class)
+                            .putExtra(SearchActivity.EXTRA_PICK_SHOW_FOR, it.title), PICK_SHOW);
+                } catch (RuntimeException ignored) { }
+            }));
+        }
         rows.add(inputRow("Find where to watch", () -> launch(new Intent(this, SearchActivity.class)
                 .putExtra(SearchActivity.EXTRA_QUERY, it.subtitle.isEmpty() ? it.title : it.subtitle))));
         rows.add(inputRow("Remove from list", () -> {
@@ -759,6 +851,27 @@ public class MainActivity extends Activity {
             else if (!dockCards.isEmpty()) dockCards.get(0).requestFocus();
         }));
         showPopup(card, rows);
+    }
+
+    static final int PICK_SHOW = 7;
+    private String pickingFor; // key of the Recently watched item whose show is being picked
+
+    @Override
+    protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request, result, data);
+        if (request != PICK_SHOW || result != RESULT_OK || data == null || pickingFor == null) return;
+        String name = data.getStringExtra(SearchActivity.RESULT_SHOW_NAME);
+        int id = data.getIntExtra(SearchActivity.RESULT_SHOW_ID, 0);
+        for (WatchHistory.Item it : WatchHistory.load(this)) {
+            if (!it.key().equals(pickingFor)) continue;
+            WatchHistory.addChosenShow(this, it.pkg, id, name);
+            break;
+        }
+        WatchHistory.setShow(this, pickingFor, name, true);
+        artTried.remove(pickingFor);
+        pickingFor = null;
+        recentsSig = null;
+        buildRecents(); // onResume runs it too; either way the new show's episode still is fetched
     }
 
     private void scrollToRecents() {
@@ -788,33 +901,70 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * Tiles without artwork (the app's media session sent none): look the show up on TMDB and keep
-     * its backdrop as the tile's artwork. Only an exact title match counts, so a YouTube video
-     * never picks up some film's poster. Each item is tried once per launch.
+     * The tile's picture from TMDB: for an episode (show in the subtitle, episode in the title), a
+     * still from that episode, else the show's backdrop; for a movie, the movie's backdrop. Used in
+     * place of the app's own artwork, which is usually the show's poster or logo. Only exact title
+     * matches count, so a YouTube video never picks up some film's picture. Asked once per item.
      */
     private void fetchMissingArt(List<WatchHistory.Item> items) {
         if (!tmdb.hasKey()) return;
         for (WatchHistory.Item it : items) {
-            if (WatchHistory.hasArt(this, it) || !artTried.add(it.key())) continue;
+            if (it.artChecked || !artTried.add(it.key())) continue;
             bg.execute(() -> {
                 Bitmap bm = null;
+                boolean asked = false;
                 try {
-                    for (String q : new String[]{it.subtitle, it.title}) {
-                        if (q == null || q.trim().isEmpty()) continue;
-                        for (Tmdb.Result r : tmdb.search(q)) {
-                            if ("person".equals(r.type) || r.backdrop == null) continue;
-                            if (!SearchActivity.squash(r.title).equals(SearchActivity.squash(q))) continue;
-                            bm = tmdb.image(r.backdrop, "w1280");
+                    String show = it.subtitle.trim(), name = it.title.trim();
+                    if (show.isEmpty() && it.unknownShow()) {
+                        // The app didn't say which show: try the shows picked for this app before.
+                        for (String[] cs : WatchHistory.chosenShows(this)) {
+                            if (!cs[0].equals(it.pkg)) continue;
+                            String still = tmdb.episodeStill(Integer.parseInt(cs[1]), name);
+                            if (still == null) continue;
+                            WatchHistory.setShow(this, it.key(), cs[2], true);
+                            bm = tmdb.image(still, "original");
                             break;
                         }
-                        if (bm != null) break;
                     }
-                } catch (Exception ignored) { }
-                if (bm == null) return;
+                    if (bm == null && !show.isEmpty()) {
+                        Tmdb.Result tv = exactMatch(tmdb.search(show), show, "tv");
+                        if (tv != null) {
+                            String still = tmdb.episodeStill(tv.id, name);
+                            if (still != null) bm = tmdb.image(still, "original");
+                            else if (tv.backdrop != null) bm = tmdb.image(tv.backdrop, "w1280");
+                        }
+                    }
+                    // A movie's own backdrop, only for movie-length items with no show name: a short
+                    // item is an episode whose show the app didn't give (Peacock), and its episode
+                    // title would match some unrelated film.
+                    if (bm == null && it.movie()) {
+                        Tmdb.Result r = exactMatch(tmdb.search(name), name, "movie");
+                        if (r != null && r.backdrop != null) bm = tmdb.image(r.backdrop, "w1280");
+                    }
+                    // Unknown show: drop any picture an earlier version matched wrongly; the app's own
+                    // artwork comes back the next time it plays, otherwise the tile shows the app.
+                    if (bm == null && it.unknownShow()) WatchHistory.deleteArt(this, it);
+                    asked = true;
+                } catch (Exception ignored) { } // offline: try again next time
+                if (asked) WatchHistory.markArtChecked(this, it.key());
+                if (bm == null) {
+                    if (asked) runOnUiThread(() -> { if (!isDestroyed()) buildRecents(); });
+                    return;
+                }
                 WatchHistory.saveArt(this, it, bm);
                 runOnUiThread(() -> { if (!isDestroyed()) { buildRecents(); refreshHero(); } });
             });
         }
+    }
+
+    /** The first movie or show (of {@code type}, if given) whose title is exactly {@code q}. */
+    private static Tmdb.Result exactMatch(List<Tmdb.Result> rs, String q, String type) {
+        String want = SearchActivity.squash(q);
+        for (Tmdb.Result r : rs) {
+            if ("person".equals(r.type) || (type != null && !type.equals(r.type))) continue;
+            if (SearchActivity.squash(r.title).equals(want)) return r;
+        }
+        return null;
     }
 
     // ---------------------------------------------------------------- hero
@@ -860,7 +1010,11 @@ public class MainActivity extends Activity {
     private void setHeroArt(WatchHistory.Item it) {
         String key = it == null ? null : it.key();
         heroKey = key;
-        if (it == null) { heroArt.animate().alpha(0f).setDuration(300).start(); return; }
+        if (it == null) {
+            heroArt.animate().alpha(0f).setDuration(300).start();
+            showCaption(true); // the wallpaper is back in view
+            return;
+        }
         int w = getResources().getDisplayMetrics().widthPixels;
         bg.execute(() -> {
             Bitmap bm = WatchHistory.loadArt(this, it, w / 2);
@@ -868,6 +1022,7 @@ public class MainActivity extends Activity {
                 if (isDestroyed() || !java.util.Objects.equals(key, heroKey) || bm == null) return;
                 heroArt.setImageBitmap(bm);
                 heroArt.animate().alpha(1f).setDuration(400).start();
+                showCaption(false); // the caption describes the wallpaper, now hidden behind the show
             });
         });
     }
@@ -891,7 +1046,7 @@ public class MainActivity extends Activity {
             p.setNextFocusUpId(p.getId());
             p.setNextFocusDownId(d > 0 ? dockCards.get(Math.min(d - 1, d / 2)).getId() : p.getId());
         }
-        int topId = pills.get(0).getId();
+        int topId = searchPill.getId(); // Up from the dock lands on Search, not the picture buttons
         for (int i = 0; i < d; i++) {
             View c = dockCards.get(i);
             c.setNextFocusUpId(topId);
@@ -1165,30 +1320,105 @@ public class MainActivity extends Activity {
         return v;
     }
 
-    /** Decode the next photo off the main thread, then crossfade it in over the current one. */
+    /** The pictures to rotate through and their captions (shared with the screensaver, ArtDream). */
+    private void loadWallpapers() {
+        Wallpapers w = Wallpapers.load(this);
+        wallpapers = w.paths;
+        captions.putAll(w.captions);
+    }
+
+    /** Decode the next picture off the main thread, then crossfade it in over the current one. */
     private void nextWallpaper() {
         handler.removeCallbacks(rotateWallpaper);
+        loadWallpapers(); // picks up pictures ArtDownloader added since
         if (wallpapers.length == 0) return;
         if (wallIndex < 0) wallIndex = getPreferences(MODE_PRIVATE).getInt("wallpaper", -1);
-        wallIndex = (wallIndex + 1) % wallpapers.length;
+        else {
+            wallHistory.push(wallIndex);
+            while (wallHistory.size() > 50) wallHistory.removeLast();
+        }
+        // After stepping back, Next retraces those steps; otherwise the next picture in the shuffle.
+        Integer fwd = wallForward.poll();
+        int next = fwd != null && fwd < wallpapers.length ? fwd
+                : Wallpapers.next(this, wallpapers.length, wallIndex); // shuffled, no repeats until all shown
+        showWallpaperAt(next);
+    }
+
+    /** Back to the picture shown before this one (the Previous button). */
+    private void prevWallpaper() {
+        Integer prev = wallHistory.poll();
+        if (prev == null || prev >= wallpapers.length) return;
+        handler.removeCallbacks(rotateWallpaper);
+        if (wallIndex >= 0) wallForward.push(wallIndex);
+        showWallpaperAt(prev);
+    }
+
+    /** Fade in the picture buttons while focus is in the top bar, out when it leaves. */
+    private void showPictureButtons(boolean show) {
+        for (View v : new View[]{picPrev, picNext}) {
+            if (v != null) v.animate().alpha(show ? 1f : 0f).setDuration(show ? 250 : 400).start();
+        }
+    }
+
+    private void showWallpaperAt(int index) {
+        wallIndex = index;
         getPreferences(MODE_PRIVATE).edit().putInt("wallpaper", wallIndex).apply();
         wallChangedAt = SystemClock.elapsedRealtime();
-        String name = "wallpapers/" + wallpapers[wallIndex];
+        String name = wallpapers[wallIndex];
         new Thread(() -> {
             Bitmap bm = null;
-            try (java.io.InputStream in = getAssets().open(name)) {
+            try (java.io.InputStream in = Wallpapers.open(this, name)) {
                 BitmapFactory.Options o = new BitmapFactory.Options();
                 o.inPreferredConfig = Bitmap.Config.RGB_565;
                 bm = BitmapFactory.decodeStream(in, null, o);
             } catch (java.io.IOException ignored) { }
             Bitmap result = bm;
-            runOnUiThread(() -> showWallpaper(result));
+            float dim = result == null ? 0f : dimFor(result);
+            runOnUiThread(() -> showWallpaper(result, name, dim));
         }).start();
-        scheduleWallpaper(WALLPAPER_INTERVAL_MS);
+        wallDelay = WALLPAPER_MIN_MS + (long) (Math.random() * (WALLPAPER_MAX_MS - WALLPAPER_MIN_MS));
+        scheduleWallpaper(wallDelay);
     }
 
-    private void showWallpaper(Bitmap bm) {
+    /**
+     * How much to darken a picture so the clock, buttons and dock stay readable: none for most
+     * pictures, up to 25% for very bright ones (frescoes, white marble in daylight). Measured where the text sits: the top band and the bottom band.
+     */
+    private static float dimFor(Bitmap bm) {
+        Bitmap s = Bitmap.createScaledBitmap(bm, 32, 18, true);
+        double sum = 0;
+        int n = 0;
+        for (int y = 0; y < 18; y++) {
+            if (y > 4 && y < 10) continue; // the middle carries no text
+            for (int x = 0; x < 32; x++) {
+                int p = s.getPixel(x, y);
+                sum += (0.2126 * Color.red(p) + 0.7152 * Color.green(p) + 0.0722 * Color.blue(p)) / 255.0;
+                n++;
+            }
+        }
+        if (s != bm) s.recycle();
+        double lum = sum / Math.max(1, n);
+        return (float) Math.max(0, Math.min(0.25, (lum - 0.45) * 0.9)); // only very bright pictures, and lightly
+    }
+
+    /**
+     * Shows the wallpaper's caption, unless a show's artwork is covering the wallpaper (heroKey set).
+     * Goes by heroKey rather than the artwork's alpha, which is mid-fade when this is called.
+     */
+    private void showCaption(boolean show) {
+        boolean has = captionTitle.getText().length() > 0;
+        caption.animate().alpha(show && has && heroKey == null ? 1f : 0f).setDuration(300).start();
+    }
+
+    private void showWallpaper(Bitmap bm, String name, float dim) {
         if (bm == null || isDestroyed()) return;
+        String[] c = captions.get(name);
+        caption.animate().alpha(0f).setDuration(400).withEndAction(() -> {
+            captionTitle.setText(c == null ? "" : c[0]);
+            captionSub.setText(c == null ? "" : c[1] + "  ·  " + c[2]);
+            showCaption(heroKey == null);
+        }).start();
+        wallDim.animate().alpha(dim).setDuration(firstWallpaper ? 600 : 2000).start();
         // Swap roles: the old front becomes the back, the new photo fades in on top.
         ImageView old = wallFront;
         wallFront = wallBack;

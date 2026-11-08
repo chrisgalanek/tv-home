@@ -9,6 +9,8 @@
     <!-- Lets the app menu open Android's uninstall confirmation (the user still confirms). -->
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- Keeps the daily art download (ArtDownloader) scheduled after the TV restarts. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Android 11 only reveals the Wi-Fi name to apps holding location; granted over ADB at install. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
@@ -62,6 +64,35 @@
             android:screenOrientation="landscape"
             android:windowSoftInputMode="adjustNothing|stateHidden"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|uiMode|density" />
+
+        <!-- Daily download of new art pictures for the background (ArtDownloader). -->
+        <service
+            android:name=".ArtDownloader"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <!-- The screensaver on demand: the home screen's Screensaver button. -->
+        <activity
+            android:name=".SlideshowActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:screenOrientation="landscape"
+            android:theme="@style/Home"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|uiMode|density" />
+
+        <!-- Screensaver: the home screen's art pictures (ArtDream). Settings → Screen saver, or set
+             over ADB by build-and-install.sh. -->
+        <service
+            android:name=".ArtDream"
+            android:exported="true"
+            android:label="Christian art"
+            android:permission="android.permission.BIND_DREAM_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.dreams.DreamService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
 
         <!-- Sees what's playing for "Recently watched" (see WatchListener). Enabled over ADB. -->
         <service

@@ -67,6 +67,8 @@ public class MainActivity extends Activity {
     static final int MAX_DOCK = 7;
     static final String PREF_DOCK = "dock";
     static final String PLAY_STORE = "com.android.vending";
+    // Inputs from the drop-down bar in other apps (TopBarService): come home with the Inputs menu open.
+    static final String EXTRA_OPEN_INPUTS = "open_inputs";
     static final String SONY_TIMERS = "com.sony.dtv.timers";
     static final String SONY_SLEEP_TIMER = "com.sony.dtv.timers.intent.action.SLEEP_TIMER";
     private String focusPkg; // tile to focus after the next rebuild (one just added or moved)
@@ -131,6 +133,9 @@ public class MainActivity extends Activity {
     private final java.util.ArrayDeque<Integer> wallHistory = new java.util.ArrayDeque<>();
     private final java.util.ArrayDeque<Integer> wallForward = new java.util.ArrayDeque<>();
     private TextView searchPill, picPrev, picNext;
+    // Sleep timer: when it turns the TV off (0 = none), shown as time left on the Sleep button.
+    private TextView sleepPill;
+    private long sleepEnd;
     private TextView greeting, clock, ampm, date, title, wifiPill, appsLabel;
     private int glowColor = 0xFF3A3A3A;
     private ValueAnimator glowAnim;
@@ -140,7 +145,7 @@ public class MainActivity extends Activity {
     private PopupWindow popup;
 
     private final BroadcastReceiver tick = new BroadcastReceiver() {
-        @Override public void onReceive(Context c, Intent i) { updateClock(); updateWifi(); }
+        @Override public void onReceive(Context c, Intent i) { updateClock(); updateWifi(); refreshSleep(); }
     };
     private final BroadcastReceiver packages = new BroadcastReceiver() {
         @Override public void onReceive(Context c, Intent i) { buildApps(); }
@@ -169,6 +174,7 @@ public class MainActivity extends Activity {
                         | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
         setContentView(buildUi());
         buildApps();
+        openInputsIfAsked(getIntent());
         // The picture buttons show only while focus is in the top bar.
         getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener(
                 (oldFocus, newFocus) -> showPictureButtons(newFocus != null && pills.contains(newFocus)));
@@ -191,6 +197,7 @@ public class MainActivity extends Activity {
         registerReceiver(tick, tf);
         updateClock();
         updateWifi();
+        refreshSleep();
         buildRecents();
         View last = lastFocusedId == View.NO_ID ? null : findViewById(lastFocusedId);
         if (last == null && !dockCards.isEmpty()) last = dockCards.get(0);
@@ -226,6 +233,14 @@ public class MainActivity extends Activity {
         if (popup != null) popup.dismiss();
         if (!dockCards.isEmpty()) dockCards.get(0).requestFocus();
         scroll.smoothScrollTo(0, 0);
+        openInputsIfAsked(intent);
+    }
+
+    /** Inputs chosen in the drop-down bar inside another app: open the Inputs menu once home shows. */
+    private void openInputsIfAsked(Intent intent) {
+        if (intent == null || !intent.getBooleanExtra(EXTRA_OPEN_INPUTS, false)) return;
+        intent.removeExtra(EXTRA_OPEN_INPUTS);
+        handler.postDelayed(() -> { if (inputsPill != null && !isFinishing()) showInputs(inputsPill); }, 450);
     }
 
     @Override
@@ -448,7 +463,7 @@ public class MainActivity extends Activity {
         // launcher can't have, so the manufacturer's timer does the work. Hidden if there isn't one.
         Intent sleep = new Intent(SONY_SLEEP_TIMER).setPackage(SONY_TIMERS);
         if (!getPackageManager().queryIntentActivities(sleep, 0).isEmpty()) {
-            TextView sleepPill = pill("Sleep", R.drawable.ic_sleep, false);
+            sleepPill = pill("Sleep", R.drawable.ic_sleep, false);
             sleepPill.setOnClickListener(v -> launch(new Intent(sleep)));
             top.add(sleepPill);
         }
@@ -498,9 +513,28 @@ public class MainActivity extends Activity {
 
     /** Label shown: icon + text in a pill. Hidden: a 34dp circle with just the icon. */
     private void setPillLabel(TextView p, boolean on) {
-        p.setText(on ? (String) p.getTag() : "");
-        p.setCompoundDrawablePadding(on ? dp(8) : 0);
-        p.setPadding(on ? dp(14) : dp(9), 0, on ? dp(16) : dp(9), 0);
+        String text = on ? (String) p.getTag() : "";
+        if (p == sleepPill && sleepEnd > System.currentTimeMillis()) {
+            // A sleep timer is running: the time left always shows ("28 min"; "Sleep · 28 min" on focus).
+            String left = SleepTimer.left(sleepEnd);
+            text = on ? "Sleep  ·  " + left : left;
+        }
+        boolean shown = !text.isEmpty();
+        p.setText(text);
+        p.setCompoundDrawablePadding(shown ? dp(8) : 0);
+        p.setPadding(shown ? dp(14) : dp(9), 0, shown ? dp(16) : dp(9), 0);
+    }
+
+    /** Re-reads the sleep timer (off the main thread) and updates the Sleep button's time left. */
+    private void refreshSleep() {
+        if (sleepPill == null) return;
+        bg.execute(() -> {
+            long end = SleepTimer.endTime();
+            runOnUiThread(() -> {
+                sleepEnd = end;
+                if (sleepPill != null) setPillLabel(sleepPill, sleepPill.hasFocus());
+            });
+        });
     }
 
     // ---------------------------------------------------------------- apps

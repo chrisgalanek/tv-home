@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="top_bar_description">Hold Up on the remote in any app to drop down the home screen\'s top buttons (Home, Search, Screensaver, Sleep, Wi-Fi, Inputs, Settings). It only watches the Up key and which app is in front; nothing leaves the TV.</string>
+</resources>

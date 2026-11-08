@@ -49,6 +49,9 @@ printf '%s\n' \
   "pm install -r /data/local/tmp/tvhome.apk" \
   "rm -f /data/local/tmp/tvhome.apk" \
   "pm grant com.mihir.tvhome android.permission.ACCESS_FINE_LOCATION" \
+  "pm grant com.mihir.tvhome android.permission.DUMP" \
+  "pm grant com.mihir.tvhome android.permission.PACKAGE_USAGE_STATS" \
+  "appops set com.mihir.tvhome GET_USAGE_STATS allow" \
   "cmd notification allow_listener com.mihir.tvhome/com.mihir.tvhome.WatchListener" \
   "settings put secure screensaver_components com.mihir.tvhome/.ArtDream" \
   "settings put secure screensaver_enabled 1" \

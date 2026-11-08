@@ -11,6 +11,11 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <!-- Keeps the daily art download (ArtDownloader) scheduled after the TV restarts. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Reads the alarm list (dumpsys alarm) for when the sleep timer turns the TV off, shown on the
+         Sleep button (SleepTimer). Developer permissions, granted over ADB by build-and-install.sh. -->
+    <uses-permission android:name="android.permission.DUMP" />
+    <!-- Android also requires usage access to show the alarm list. Granted over ADB with DUMP. -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Android 11 only reveals the Wi-Fi name to apps holding location; granted over ADB at install. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
@@ -64,6 +69,21 @@
             android:screenOrientation="landscape"
             android:windowSoftInputMode="adjustNothing|stateHidden"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|uiMode|density" />
+
+        <!-- Hold Up in any app for a drop-down bar with the home screen's top buttons (TopBarService).
+             An accessibility service, so the owner switches it on: Settings → System → Accessibility. -->
+        <service
+            android:name=".TopBarService"
+            android:exported="true"
+            android:label="Home: top bar"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/top_bar_service" />
+        </service>
 
         <!-- Daily download of new art pictures for the background (ArtDownloader). -->
         <service

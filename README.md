@@ -63,8 +63,15 @@ Undo everything with `tools/restore.sh <the same list>`.
   buttons whose label slides out on focus: **Get apps** (the Play Store; new installs appear in the grid on their own),
   **Screensaver** (the art slideshow now, starting on the current picture; any button returns),
   **Sleep** (the TV's own sleep timer, 15 to 120 minutes; shown on Sony sets, since only the
-  manufacturer's app may turn the TV off), **Wi-Fi** (shows the network name when Location is on),
+  manufacturer's app may turn the TV off; while a timer runs the button shows the time left, read
+  from Android's alarm list, which needs the DUMP and usage-access permissions the install script
+  grants), **Wi-Fi** (shows the network name when Location is on),
   **Inputs** (HDMI/AV/Live TV dropdown; the remote's Menu key opens it too) and **Settings**.
+- In any app, hold **Up** on the remote and a transparent bar slides down from the top with the same
+  buttons (Home, Search, Get apps, Screensaver, Sleep, Wi-Fi, Inputs, Settings); Back, Down or a few
+  idle seconds close it, and a short press of Up still goes to the app. After Sleep, Wi-Fi,
+  Settings and the like it returns you to the app you were in (Home and Inputs stay home). It's an accessibility
+  service, so switch it on once: Settings → System → Accessibility → **Home: top bar**.
 - A dock of your favourite apps over a glow coloured from the focused app's banner. If you've
   watched something in that app, its artwork fades in behind the dock with **Continue · App**, the
   episode and the show; otherwise just the app's name shows. The top of the next row peeks in at

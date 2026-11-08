@@ -175,8 +175,7 @@ public class ArtDownloader extends JobService {
                 }
                 framed.recycle();
                 String caption = cleanTitle(meta(md, "ObjectName"), title);
-                String author = meta(md, "Artist");
-                if (author.isEmpty()) author = "Unknown";
+                String author = Wallpapers.tidyAuthor(meta(md, "Artist"));
                 if (author.length() > 60) author = author.substring(0, 57) + "…";
                 append(new File(dir, "captions.tsv"), name + "\t" + caption + "\t" + author + "\tWikimedia Commons, " + license);
                 append(new File(dir, "credits.tsv"), name + "\t" + title + "\t" + author + "\t" + license + "\t" + ii.optString("descriptionurl"));

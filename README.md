@@ -99,7 +99,9 @@ Undo everything with `tools/restore.sh <the same list>`.
   files, with credits.tsv listing each source).
 - The screensaver shows the same pictures full screen and at full brightness: it starts on the one
   the home screen is showing, then crossfades to another every 40 seconds, each shown whole, with
-  its caption and the time in the bottom corners. The install script sets it as the TV's screensaver ("Christian art");
+  its caption and the time in the bottom corners. Left and right on the remote step to the previous and next picture
+  (round ‹ › buttons fade in at the edges, then away); any other button wakes the TV. The
+  Screensaver button in the top bar works the same way. The install script sets it as the TV's screensaver ("Christian art");
   to go back to Google's Ambient mode, run
   `tools/batch.sh <<< 'settings put secure screensaver_components com.google.android.apps.tv.dreamx/.service.Backdrop'`.
 - Deterministic D-pad focus, remembers the last tile, picks up newly installed apps on return.

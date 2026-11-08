@@ -7,7 +7,8 @@ import android.view.View;
 
 /**
  * The screensaver on demand (the home screen's Screensaver button). Apps can't start the TV's
- * real screensaver, so this shows the same slideshow full screen; any button on the remote goes back.
+ * real screensaver, so this shows the same slideshow full screen. Left / right on the remote step
+ * through pictures; any other button goes back.
  */
 public class SlideshowActivity extends Activity {
     private ArtSlideshow show;
@@ -37,7 +38,8 @@ public class SlideshowActivity extends Activity {
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent e) {
-        // Any button wakes it, like the real screensaver. Volume still works.
+        if (show.handleKey(e)) return true; // left / right: previous / next picture
+        // Any other button wakes it, like the real screensaver. Volume still works.
         int k = e.getKeyCode();
         if (k == KeyEvent.KEYCODE_VOLUME_UP || k == KeyEvent.KEYCODE_VOLUME_DOWN || k == KeyEvent.KEYCODE_VOLUME_MUTE) {
             return super.dispatchKeyEvent(e);

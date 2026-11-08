@@ -67,9 +67,15 @@ final class Wallpapers {
                 new java.io.FileInputStream(new java.io.File(dir, "captions.tsv")), "UTF-8"))) {
             for (String line; (line = r.readLine()) != null; ) {
                 String[] f = line.split("\t");
-                if (f.length >= 4) captions.put("file:" + new java.io.File(dir, f[0]).getPath(), new String[]{f[1], f[2], f[3]});
+                if (f.length >= 4) captions.put("file:" + new java.io.File(dir, f[0]).getPath(), new String[]{f[1], tidyAuthor(f[2]), f[3]});
             }
         } catch (IOException ignored) { }
+    }
+
+    /** Commons' "Anonymous" / "Unknown author" templates come through run together: "AnonymousUnknown author". */
+    static String tidyAuthor(String a) {
+        String t = a.replaceAll("(?i)anonymous\\s*unknown author|unknown author|anonymous\\s*anonymous", "Unknown artist").trim();
+        return t.isEmpty() ? "Unknown artist" : t;
     }
 
     /** Opens a picture: a bundled asset, or a downloaded "file:" one. */

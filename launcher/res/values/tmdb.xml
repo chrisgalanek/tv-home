@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Left empty on purpose. build-and-install.sh fills it from launcher/tmdb-api-key.txt
+         (git-ignored) so the key never lands in the repo. -->
+    <string name="tmdb_key" translatable="false"></string>
+</resources>

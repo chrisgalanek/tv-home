@@ -1,7 +1,7 @@
 # Sony BRAVIA (device BRAVIA_AE2), Google TV, Android 14
 # Apply: tools/disable.sh examples/sony-bravia-ae2/debloat.txt   Undo: tools/restore.sh <same file>
 # Everything is DISABLED for user 0, never uninstalled.
-# Kept on purpose (this household uses them): Chromecast, AirPlay, Google Assistant / Gemini voice,
+# Kept on purpose (this household uses them): Chromecast, AirPlay,
 # DLNA home-network media, ambient screensaver, Google Feedback, every streaming app.
 # Already disabled before we started (left alone, restore won't touch them): Netflix, Sony tab,
 # Sony promos, Sony Pictures Core, YouTube Music, smart help, eco dashboard and a few more.
@@ -24,3 +24,9 @@ com.sony.dtv.multiscreendemo
 # Google extras this household doesn't use
 com.google.android.play.games
 com.google.android.videos          # Google TV / Play Movies (also feeds Freeplay channels)
+
+# Voice search and Gemini (asked to disable; the launcher has its own search instead)
+com.google.android.katniss         # Google Assistant / Gemini, voice search and Google TV search
+com.sony.dtv.voicesearch           # Sony voice search hook for the remote's mic button
+com.sony.dtv.assistantadapter      # Sony bridge to the Google Assistant
+com.google.android.tts             # Speech Services by Google: voice recognition (Play Store mic) and text-to-speech

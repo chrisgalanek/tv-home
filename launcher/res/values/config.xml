@@ -36,5 +36,5 @@
     <string name="input_picker_package" translatable="false">com.sony.dtv.tvlin</string>
 
     <!-- Tiles per row in the grid. -->
-    <integer name="columns">5</integer>
+    <integer name="columns">6</integer>
 </resources>

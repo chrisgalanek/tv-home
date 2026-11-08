@@ -59,18 +59,57 @@ Undo everything with `tools/restore.sh <the same list>`.
 
 ## The launcher
 
-- Clock, greeting and date top-left. Frosted pills top-right for **Inputs** (HDMI/AV/Live TV
-  dropdown; the remote's Menu key opens it too), **Get apps** (the Play Store; new installs appear in
-  the grid on their own), **Wi-Fi** (shows the network name when Location is on) and **Settings**.
-- A dock of your favourite apps. The focused app's name appears above it over a glow coloured from
-  its banner. Press Down for every other app in a grid.
+- Clock, greeting and date top-left. Top-right, a **Search** pill (see below) and round icon
+  buttons whose label slides out on focus: **Inputs** (HDMI/AV/Live TV dropdown; the remote's Menu
+  key opens it too), **Get apps** (the Play Store; new installs appear in the grid on their own),
+  **Sleep** (the TV's own sleep timer, 15 to 120 minutes; shown on Sony sets, since only the
+  manufacturer's app may turn the TV off), **Wi-Fi** (shows the network name when Location is on)
+  and **Settings**.
+- A dock of your favourite apps over a glow coloured from the focused app's banner. If you've
+  watched something in that app, its artwork fades in behind the dock with **Continue · App**, the
+  episode and the show; otherwise just the app's name shows. The top of the next row peeks in at
+  the bottom of the screen; press Down for it and for every other app in a grid (6 across).
+- **Recently watched**: the last 10 shows you played, in a row under the dock (press Down), with a
+  small app icon in the corner and a progress bar when the app reports how far in you are. When an
+  app sends no artwork, the launcher looks the show up on TMDB (exact title matches only) and uses
+  its backdrop, if Search has a key. Apps
+  report what's playing (title, show, artwork) for the remote and Assistant; the launcher's
+  notification listener records it, and the install script grants that access over ADB. It only
+  covers apps that publish those details, and history starts when the launcher is installed. OK
+  goes back into the show while its app is still running, otherwise opens the app; long-press for
+  Search in the app, Search all apps, or Remove from list. Stored on the TV only.
 - 12 nature photos crossfade every 10 minutes, with a scrim so text stays readable. Swap them in
   `launcher/assets/wallpapers/` (1920×1080 JPEGs, credits in `launcher/WALLPAPER-CREDITS.md`).
 - Deterministic D-pad focus, remembers the last tile, picks up newly installed apps on return.
 
+### Search
+
+Type a movie, show or person and the **Top result** comes first, big (smaller while the keyboard
+is up, so it stays above it) (the exact title match, most popular first, so the original beats its spin-offs)
+with its backdrop and description; the rest follow in rows by kind (**Shows**, **Movies**,
+**People**) with two-line titles. Titles without artwork show their name on a colour. Pick a person
+to see their movies and shows.
+
+Pick a title to see where it streams. One big button opens the best choice among your installed
+apps (one that includes it with your subscription or for free, preferring one that can open the
+title itself). **Other ways to watch** lists the rest as smaller buttons with the service's logo
+and Subscription, Free, Rent or Buy. Apps you have are a see-through light green that fades out to the right; services you don't have are outlined, marked **Get**, and open
+the Play Store searching for that app. **▶ Watch on …** opens the title itself: for Apple TV, Hulu,
+Tubi, Paramount+ and Prime Video, the launcher looks the title up on
+[Wikidata](https://www.wikidata.org/), which records many titles' IDs on those services, and opens
+the app on it. **▶ Open in …** opens the app instead (on its search for the title, if it supports
+that), either because the app can't take a link or because Wikidata doesn't have that title's ID
+yet. Back on the remote returns to the results. Data comes from [TMDB](https://www.themoviedb.org/), with streaming availability from
+JustWatch, so Search is the one part of the launcher that goes online.
+
+It needs a free TMDB API key: make an account, go to Settings → API, request a key, and save the
+API key (or the longer read access token) on its own in `launcher/tmdb-api-key.txt`. That file is
+git-ignored; `launcher/build-and-install.sh` builds the key into the APK.
+
 Change the dock on the TV: long-press OK on any app. In the grid you get **Add to dock** (up to 7
 apps); on a dock app, **Move left**, **Move right** and **Remove from dock**. Both menus also have
-**App info** (force stop, clear data, uninstall). Changes are saved on the TV and survive
+**App info** (force stop, clear data), and apps you installed yourself also get **Uninstall**,
+which opens Android's own confirmation. Apps that came with the TV can only be disabled, from App info. Changes are saved on the TV and survive
 reinstalls. `config.xml` only sets the dock the launcher starts with; to go back to it, run
 `tools/batch.sh <<< 'pm clear com.mihir.tvhome'`.
 

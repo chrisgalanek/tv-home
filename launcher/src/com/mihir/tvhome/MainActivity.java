@@ -514,7 +514,7 @@ public class MainActivity extends Activity {
     /** Label shown: icon + text in a pill. Hidden: a 34dp circle with just the icon. */
     private void setPillLabel(TextView p, boolean on) {
         String text = on ? (String) p.getTag() : "";
-        if (p == sleepPill && sleepEnd > System.currentTimeMillis()) {
+        if (p == sleepPill && SleepTimer.running(sleepEnd)) {
             // A sleep timer is running: the time left always shows ("28 min"; "Sleep · 28 min" on focus).
             String left = SleepTimer.left(sleepEnd);
             text = on ? "Sleep  ·  " + left : left;

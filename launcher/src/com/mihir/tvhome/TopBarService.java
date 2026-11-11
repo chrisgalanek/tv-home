@@ -274,7 +274,7 @@ public class TopBarService extends AccessibilityService {
 
     private void setLabel(TextView p, String label, boolean on) {
         String text = on ? label : "";
-        if (p == sleepBtn && sleepEnd > System.currentTimeMillis()) {
+        if (p == sleepBtn && SleepTimer.running(sleepEnd)) {
             String left = SleepTimer.left(sleepEnd); // a timer is running: its time left always shows
             text = on ? "Sleep  ·  " + left : left;
         }

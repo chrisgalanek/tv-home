@@ -62,10 +62,12 @@ Undo everything with `tools/restore.sh <the same list>`.
 - Clock, greeting and date top-left. Top-right, a **Search** pill (see below) and round icon
   buttons whose label slides out on focus: **Get apps** (the Play Store; new installs appear in the grid on their own),
   **Screensaver** (the art slideshow now, starting on the current picture; any button returns),
-  **Sleep** (the TV's own sleep timer, 15 to 120 minutes; shown on Sony sets, since only the
-  manufacturer's app may turn the TV off; while a timer runs the button shows the time left, read
-  from Android's alarm list, which needs the DUMP and usage-access permissions the install script
-  grants), **Wi-Fi** (shows the network name when Location is on),
+  **Sleep** (a dropdown: Off, 15, 30, 45 minutes, 1 hour, 1 hour 30 minutes or 2 hours; a notice
+  shows a minute before, then the TV goes to sleep. The launcher runs this timer itself and turns
+  the TV off through the **Home: top bar** accessibility service, so that needs to be on; without
+  it the TV's own sleep timer screen opens instead. While a timer runs the button shows the time
+  left, also for a timer set in the TV's own menu, read from Android's alarm list with the DUMP and
+  usage-access permissions the install script grants), **Wi-Fi** (shows the network name when Location is on),
   **Inputs** (HDMI/AV/Live TV dropdown; the remote's Menu key opens it too) and **Settings**.
 - In any app, hold **Up** on the remote and a transparent bar slides down from the top with the same
   buttons (Home, Search, Get apps, Screensaver, Sleep, Wi-Fi, Inputs, Settings); Back, Down or a few

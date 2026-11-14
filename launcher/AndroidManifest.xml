@@ -85,6 +85,11 @@
                 android:resource="@xml/top_bar_service" />
         </service>
 
+        <!-- The launcher's sleep timer going off: a warning, then the TV goes to sleep (SleepTimer). -->
+        <receiver
+            android:name=".SleepReceiver"
+            android:exported="false" />
+
         <!-- Daily download of new art pictures for the background (ArtDownloader). -->
         <service
             android:name=".ArtDownloader"

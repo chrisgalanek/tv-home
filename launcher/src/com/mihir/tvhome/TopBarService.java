@@ -2,6 +2,7 @@ package com.mihir.tvhome;
 
 import android.accessibilityservice.AccessibilityService;
 import android.content.Intent;
+import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
@@ -47,14 +48,22 @@ public class TopBarService extends AccessibilityService {
     // something like the sleep timer) the app to return to once that screen closes back to home.
     static final long RETURN_WINDOW_MS = 20 * 60 * 1000;
     private String barApp, returnTo;
+    // The app's media session when the bar opened: its player screen and whether it was playing,
+    // so coming back lands on the video (not the app's start screen) and resumes it.
+    private android.media.session.MediaController barSession, returnSession;
+    private boolean returnWasPlaying;
     private final Set<String> passThrough = new HashSet<>(); // screens on the way back: not a new app
     private long returnUntil;
+    /** The running service, for SleepReceiver (putting the TV to sleep) and the home screen. */
+    static volatile TopBarService instance;
+    private LinearLayout sleepMenu; // the sleep timer dropdown, while open
     private TextView sleepBtn; // shows the sleep timer's time left while one is running
     private long sleepEnd;
     private final Runnable idleClose = this::hideBar;
 
     @Override
     protected void onServiceConnected() {
+        instance = this;
         wm = getSystemService(WindowManager.class);
         android.accessibilityservice.AccessibilityServiceInfo info = getServiceInfo();
         if (info != null) {
@@ -80,6 +89,62 @@ public class TopBarService extends AccessibilityService {
     @Override
     public void onInterrupt() { }
 
+    @Override
+    public boolean onUnbind(Intent intent) {
+        instance = null;
+        return super.onUnbind(intent);
+    }
+
+    @Override
+    public void onDestroy() {
+        instance = null;
+        super.onDestroy();
+    }
+
+    /** The sleep timer ran out: put the TV to sleep (the accessibility "lock screen" action does). */
+    void sleepNow() {
+        handler.post(() -> {
+            hideBar();
+            performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN);
+        });
+    }
+
+    /** A short notice at the bottom of the screen, over whatever is on (the sleep timer's warning). */
+    void showNotice(String text) {
+        handler.post(() -> {
+            if (wm == null) return;
+            TextView t = new TextView(this);
+            t.setText(text);
+            t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+            t.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+            t.setTextColor(0xFFFFFFFF);
+            Drawable moon = getDrawable(R.drawable.ic_sleep).mutate();
+            moon.setBounds(0, 0, dp(18), dp(18));
+            moon.setTint(0xFFFFFFFF);
+            t.setCompoundDrawables(moon, null, null, null);
+            t.setCompoundDrawablePadding(dp(10));
+            t.setPadding(dp(20), dp(12), dp(22), dp(12));
+            GradientDrawable bg = new GradientDrawable();
+            bg.setCornerRadius(dp(24));
+            bg.setColor(0xE6202024);
+            bg.setStroke(dp(1), 0x33FFFFFF);
+            t.setBackground(bg);
+            WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+                    WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+                    WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                    PixelFormat.TRANSLUCENT);
+            lp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+            lp.y = dp(48);
+            try { wm.addView(t, lp); } catch (RuntimeException e) { return; }
+            t.setAlpha(0f);
+            t.animate().alpha(1f).setDuration(300).start();
+            handler.postDelayed(() -> t.animate().alpha(0f).setDuration(500).withEndAction(() -> {
+                try { wm.removeView(t); } catch (RuntimeException ignored) { }
+            }).start(), 10_000);
+        });
+    }
+
     /**
      * After a bar button opened a screen (sleep timer, Wi-Fi, Settings, Search...): when that screen
      * closes and Android falls back to the home screen, go back to the app that was in front
@@ -91,8 +156,11 @@ public class TopBarService extends AccessibilityService {
         if (System.currentTimeMillis() > returnUntil || pkg.equals(returnTo)) { returnTo = null; return; }
         if (pkg.equals(getPackageName()) && cls.endsWith(".MainActivity")) {
             String app = returnTo;
+            android.media.session.MediaController session = returnSession;
+            boolean resume = returnWasPlaying;
             returnTo = null;
-            handler.postDelayed(() -> openPackage(app), 150);
+            returnSession = null;
+            handler.postDelayed(() -> backToVideo(app, session, resume), 150);
             return;
         }
         if (!pkg.equals(getPackageName()) && !passThrough.contains(pkg)
@@ -101,10 +169,58 @@ public class TopBarService extends AccessibilityService {
         }
     }
 
+    /**
+     * The app's media session, if it has one (seen through the launcher's notification listener,
+     * WatchListener, which Android lets read other apps' sessions).
+     */
+    private android.media.session.MediaController sessionFor(String pkg) {
+        if (pkg == null) return null;
+        try {
+            android.media.session.MediaSessionManager msm = getSystemService(android.media.session.MediaSessionManager.class);
+            for (android.media.session.MediaController mc : msm.getActiveSessions(
+                    new android.content.ComponentName(this, WatchListener.class))) {
+                if (pkg.equals(mc.getPackageName())) return mc;
+            }
+        } catch (RuntimeException ignored) { } // listener access not granted
+        return null;
+    }
+
+    /**
+     * Back to what was on before the bar: the player screen of the app's media session (where the
+     * video is), playing again if it was playing and the app paused it meanwhile. Without a
+     * session, just the app.
+     */
+    private void backToVideo(String app, android.media.session.MediaController session, boolean resume) {
+        android.app.PendingIntent player = session == null ? null : session.getSessionActivity();
+        boolean opened = false;
+        if (player != null) {
+            try {
+                android.app.ActivityOptions o = android.app.ActivityOptions.makeBasic();
+                if (android.os.Build.VERSION.SDK_INT >= 34) {
+                    o.setPendingIntentBackgroundActivityStartMode(android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
+                }
+                player.send(this, 0, null, null, null, null, o.toBundle());
+                opened = true;
+            } catch (android.app.PendingIntent.CanceledException ignored) { }
+        }
+        if (!opened) openPackage(app);
+        if (resume && session != null) {
+            handler.postDelayed(() -> {
+                android.media.session.PlaybackState st = session.getPlaybackState();
+                if (st != null && st.getState() == android.media.session.PlaybackState.STATE_PAUSED) {
+                    session.getTransportControls().play();
+                }
+            }, 1500);
+        }
+    }
+
     /** Called by a bar button that opens {@code i}: come back to the app afterwards. */
     private void comeBackAfter(Intent i) {
         if (barApp == null || barApp.equals(getPackageName())) return;
         returnTo = barApp;
+        returnSession = barSession;
+        returnWasPlaying = barSession != null && barSession.getPlaybackState() != null
+                && barSession.getPlaybackState().getState() == android.media.session.PlaybackState.STATE_PLAYING;
         returnUntil = System.currentTimeMillis() + RETURN_WINDOW_MS;
         passThrough.clear();
         android.content.pm.ResolveInfo r = getPackageManager().resolveActivity(i, 0);
@@ -150,9 +266,20 @@ public class TopBarService extends AccessibilityService {
     private void showBar() {
         if (bar != null || wm == null) return;
         barApp = frontPackage;
+        barSession = sessionFor(barApp);
         bar = new FrameLayout(this) {
             @Override public boolean dispatchKeyEvent(KeyEvent e) {
                 int k = e.getKeyCode();
+                if (sleepMenu != null) {
+                    // In the sleep timer dropdown: Up / Down move through it, Back closes just the menu.
+                    restartIdle();
+                    if (k == KeyEvent.KEYCODE_BACK) {
+                        if (e.getAction() == KeyEvent.ACTION_UP) closeSleepMenu();
+                        return true;
+                    }
+                    if (k == KeyEvent.KEYCODE_DPAD_LEFT || k == KeyEvent.KEYCODE_DPAD_RIGHT) return true;
+                    return super.dispatchKeyEvent(e);
+                }
                 if (k == KeyEvent.KEYCODE_BACK || k == KeyEvent.KEYCODE_DPAD_DOWN) {
                     if (e.getAction() == KeyEvent.ACTION_UP) hideBar();
                     return true;
@@ -184,12 +311,13 @@ public class TopBarService extends AccessibilityService {
             }));
         }
         buttons.add(pill("Screensaver", R.drawable.ic_screensaver, false, () -> openAndReturn(new Intent(this, SlideshowActivity.class))));
-        Intent sleep = new Intent(MainActivity.SONY_SLEEP_TIMER).setPackage(MainActivity.SONY_TIMERS);
-        if (!getPackageManager().queryIntentActivities(sleep, 0).isEmpty()) {
-            sleepBtn = pill("Sleep", R.drawable.ic_sleep, false, () -> openAndReturn(new Intent(sleep)));
-            buttons.add(sleepBtn);
+        // Sleep: a dropdown of timer lengths (SleepTimer), opened under the button; it stays in the bar.
+        sleepBtn = pill("Sleep", R.drawable.ic_sleep, false, null);
+        sleepBtn.setOnClickListener(v -> showSleepMenu(v));
+        buttons.add(sleepBtn);
+        {
             new Thread(() -> {
-                long end = SleepTimer.endTime();
+                long end = SleepTimer.current(this);
                 handler.post(() -> {
                     sleepEnd = end;
                     if (sleepBtn != null) setLabel(sleepBtn, "Sleep", sleepBtn.hasFocus());
@@ -226,7 +354,79 @@ public class TopBarService extends AccessibilityService {
         restartIdle();
     }
 
+    /** The sleep timer dropdown: Off and each length, the running choice ticked, under the Sleep button. */
+    private void showSleepMenu(View anchor) {
+        if (bar == null || sleepMenu != null) return;
+        sleepMenu = new LinearLayout(this);
+        sleepMenu.setOrientation(LinearLayout.VERTICAL);
+        sleepMenu.setPadding(dp(8), dp(8), dp(8), dp(8));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(dp(16));
+        bg.setColor(0xF02A2A2E);
+        bg.setStroke(dp(1), 0x26FFFFFF);
+        sleepMenu.setBackground(bg);
+        sleepMenu.setElevation(dp(16));
+        int current = SleepTimer.ownMinutes(this);
+        List<TextView> rows = new ArrayList<>();
+        for (int minutes : SleepTimer.CHOICES) {
+            TextView r = menuRow((minutes == current ? "✓  " : "     ") + SleepTimer.choiceLabel(minutes));
+            r.setOnClickListener(v -> {
+                SleepTimer.set(this, minutes);
+                sleepEnd = SleepTimer.ownEnd(this);
+                hideBar();
+            });
+            rows.add(r);
+            sleepMenu.addView(r, new LinearLayout.LayoutParams(-1, dp(42)));
+        }
+        for (int i = 0; i < rows.size(); i++) {
+            TextView r = rows.get(i);
+            r.setNextFocusUpId(rows.get(Math.max(0, i - 1)).getId());
+            r.setNextFocusDownId(rows.get(Math.min(rows.size() - 1, i + 1)).getId());
+        }
+        int[] a = new int[2], b = new int[2];
+        anchor.getLocationOnScreen(a);
+        bar.getLocationOnScreen(b);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(240), -2, Gravity.TOP | Gravity.START);
+        lp.leftMargin = Math.min(a[0] - b[0] - bar.getPaddingLeft(), bar.getWidth() - bar.getPaddingLeft() - bar.getPaddingRight() - dp(240));
+        lp.topMargin = a[1] - b[1] - bar.getPaddingTop() + anchor.getHeight() + dp(14);
+        bar.addView(sleepMenu, lp);
+        sleepMenu.setAlpha(0f);
+        sleepMenu.setTranslationY(-dp(12));
+        sleepMenu.animate().alpha(1f).translationY(0).setDuration(200).start();
+        int idx = 0;
+        for (int i = 0; i < SleepTimer.CHOICES.length; i++) if (SleepTimer.CHOICES[i] == current) idx = i;
+        rows.get(idx).requestFocus();
+    }
+
+    private void closeSleepMenu() {
+        if (sleepMenu == null || bar == null) return;
+        bar.removeView(sleepMenu);
+        sleepMenu = null;
+        if (sleepBtn != null) sleepBtn.requestFocus();
+    }
+
+    private TextView menuRow(String label) {
+        TextView r = new TextView(this);
+        r.setText(label);
+        r.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        r.setTextColor(0xFFFFFFFF);
+        r.setGravity(Gravity.CENTER_VERTICAL);
+        r.setPadding(dp(14), 0, dp(14), 0);
+        r.setFocusable(true);
+        r.setId(View.generateViewId());
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(dp(10));
+        bg.setColor(Color.TRANSPARENT);
+        r.setBackground(bg);
+        r.setOnFocusChangeListener((v, has) -> {
+            bg.setColor(has ? 0xF2FFFFFF : Color.TRANSPARENT);
+            r.setTextColor(has ? 0xFF111111 : 0xFFFFFFFF);
+        });
+        return r;
+    }
+
     private void hideBar() {
+        sleepMenu = null;
         handler.removeCallbacks(idleClose);
         FrameLayout b = bar;
         if (b == null) return;
@@ -268,7 +468,7 @@ public class TopBarService extends AccessibilityService {
             if (!showLabel) setLabel(p, label, has);
             Focus.animate(v, has, null);
         });
-        p.setOnClickListener(v -> { hideBar(); action.run(); });
+        if (action != null) p.setOnClickListener(v -> { hideBar(); action.run(); });
         return p;
     }
 

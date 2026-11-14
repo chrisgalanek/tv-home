@@ -461,12 +461,16 @@ public class MainActivity extends Activity {
         top.add(saver);
         // Sleep: the TV's own sleep timer screen. Turning the TV off needs a system permission a
         // launcher can't have, so the manufacturer's timer does the work. Hidden if there isn't one.
+        // Sleep: a dropdown of timer lengths (SleepTimer). The launcher's timer needs the "Home: top bar"
+        // accessibility service to turn the TV off; without it, the TV's own sleep timer screen opens.
         Intent sleep = new Intent(SONY_SLEEP_TIMER).setPackage(SONY_TIMERS);
-        if (!getPackageManager().queryIntentActivities(sleep, 0).isEmpty()) {
-            sleepPill = pill("Sleep", R.drawable.ic_sleep, false);
-            sleepPill.setOnClickListener(v -> launch(new Intent(sleep)));
-            top.add(sleepPill);
-        }
+        boolean tvTimer = !getPackageManager().queryIntentActivities(sleep, 0).isEmpty();
+        sleepPill = pill("Sleep", R.drawable.ic_sleep, false);
+        sleepPill.setOnClickListener(v -> {
+            if (TopBarService.instance == null && tvTimer) launch(new Intent(sleep));
+            else showSleepMenu(v);
+        });
+        top.add(sleepPill);
         wifiPill = pill("Wi-Fi", R.drawable.ic_wifi, false);
         wifiPill.setOnClickListener(v -> launch(new Intent(Settings.ACTION_WIFI_SETTINGS)));
         TextView settings = pill("Settings", R.drawable.ic_settings, false);
@@ -526,10 +530,31 @@ public class MainActivity extends Activity {
     }
 
     /** Re-reads the sleep timer (off the main thread) and updates the Sleep button's time left. */
+    /** The sleep timer dropdown: Off and each length, the running choice ticked. */
+    private void showSleepMenu(View anchor) {
+        List<TextView> rows = new ArrayList<>();
+        if (TopBarService.instance == null) {
+            TextView note = inputRow("Turn on Home: top bar in Accessibility", () -> launch(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+            note.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+            rows.add(note);
+        }
+        int current = SleepTimer.ownMinutes(this);
+        for (int minutes : SleepTimer.CHOICES) {
+            rows.add(inputRow((minutes == current ? "✓  " : "     ") + SleepTimer.choiceLabel(minutes), () -> {
+                SleepTimer.set(this, minutes);
+                refreshSleep();
+            }));
+        }
+        showPopup(anchor, rows);
+        int idx = rows.size() - SleepTimer.CHOICES.length;
+        for (int i = 0; i < SleepTimer.CHOICES.length; i++) if (SleepTimer.CHOICES[i] == current) idx += i;
+        rows.get(idx).requestFocus();
+    }
+
     private void refreshSleep() {
         if (sleepPill == null) return;
         bg.execute(() -> {
-            long end = SleepTimer.endTime();
+            long end = SleepTimer.current(this);
             runOnUiThread(() -> {
                 sleepEnd = end;
                 if (sleepPill != null) setPillLabel(sleepPill, sleepPill.hasFocus());

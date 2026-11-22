@@ -717,8 +717,10 @@ public class MainActivity extends Activity {
     private void buildRecents() {
         List<WatchHistory.Item> items = new ArrayList<>();
         StringBuilder sig = new StringBuilder();
+        // One tile per app: its most recent show or video (the history is newest first).
+        Set<String> apps = new HashSet<>();
         for (WatchHistory.Item it : WatchHistory.load(this)) {
-            if (hidden.contains(it.pkg) || !isInstalled(it.pkg)) continue;
+            if (hidden.contains(it.pkg) || !isInstalled(it.pkg) || !apps.add(it.pkg)) continue;
             items.add(it);
             sig.append(it.key()).append(WatchHistory.hasArt(this, it) ? "+" : "-")
                     .append(it.artChecked ? "t" : "").append('\n');

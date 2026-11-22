@@ -78,7 +78,8 @@ Undo everything with `tools/restore.sh <the same list>`.
   watched something in that app, its artwork fades in behind the dock with **Continue · App**, the
   episode and the show; otherwise just the app's name shows. The top of the next row peeks in at
   the bottom of the screen; press Down for it and for every other app in a grid (6 across).
-- **Recently watched**: the last 10 shows you played, in a row under the dock (press Down), with a
+- **Recently watched**: the last show or video you played in each app (one tile per app, newest
+  first), in a row under the dock (press Down), with a
   small app icon in the corner and a progress bar when the app reports how far in you are. When an
   app sends no artwork, the launcher looks the show up on TMDB (exact title matches only) and uses
   its backdrop, if Search has a key. Apps

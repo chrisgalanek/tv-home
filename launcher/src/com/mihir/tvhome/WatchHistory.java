@@ -16,11 +16,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The last {@link #MAX} shows played on the TV, newest first, as reported by apps' media sessions
+ * The latest show or video played in each app (up to {@link #MAX} apps), newest first, as reported by apps' media sessions
  * (see {@link WatchListener}). Stored on the TV only: a small JSON list in prefs, artwork as JPEGs.
  */
 final class WatchHistory {
-    static final int MAX = 10;
+    static final int MAX = 12; // apps: one entry each (its latest show or video)
     private static final String PREFS = "watch_history", KEY = "items";
 
     static final class Item {
@@ -80,6 +80,11 @@ final class WatchHistory {
             }
         }
         items.add(0, item);
+        // Only the latest per app: drop that app's older shows, so another app's run of episodes
+        // never pushes an app out of the list.
+        for (int i = items.size() - 1; i > 0; i--) {
+            if (items.get(i).pkg.equals(item.pkg)) deleteArt(c, items.remove(i));
+        }
         while (items.size() > MAX) deleteArt(c, items.remove(items.size() - 1));
         save(c, items);
         return isNew;
